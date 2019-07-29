@@ -11,6 +11,7 @@ import os
 import time
 import inspect
 from multiprocessing import Process
+from mlp import MultiLayerPerceptron
 
 #============================================================================================#
 # Utilities
@@ -38,7 +39,14 @@ def build_mlp(input_placeholder, output_size, scope, n_layers, size, activation=
         Hint: use tf.layers.dense    
     """
     # YOUR CODE HERE
-    raise NotImplementedError
+    model_config = MultiLayerPerceptron.default_model_config.copy()
+    model_config[neurons] = [ size for _ in range(n_layers) ]
+    model_config[activation] = activation
+    model_config[last_activation] = output_activation
+    mlp = MultiLayerPerceptron(model_config = model_config, scope_name = scope)
+    mlp.build_network(input_placeholder = input_placeholder)
+    output_placeholder = mlp.Y
+    # raise NotImplementedError
     return output_placeholder
 
 def pathlength(path):
@@ -95,14 +103,15 @@ class Agent(object):
                 sy_ac_na: placeholder for actions
                 sy_adv_n: placeholder for advantages
         """
-        raise NotImplementedError
+        # raise NotImplementedError
         sy_ob_no = tf.placeholder(shape=[None, self.ob_dim], name="ob", dtype=tf.float32)
         if self.discrete:
             sy_ac_na = tf.placeholder(shape=[None], name="ac", dtype=tf.int32) 
         else:
             sy_ac_na = tf.placeholder(shape=[None, self.ac_dim], name="ac", dtype=tf.float32) 
         # YOUR CODE HERE
-        sy_adv_n = None
+        # sy_adv_n = None
+        sy_adv_n = tf.placeholder(shape=[None], name="adv", dtype=tf.float32) # it's r(tau)
         return sy_ob_no, sy_ac_na, sy_adv_n
 
 
@@ -134,8 +143,10 @@ class Agent(object):
                 Pass in self.n_layers for the 'n_layers' argument, and
                 pass in self.size for the 'size' argument.
         """
-        raise NotImplementedError
+        # raise NotImplementedError
         if self.discrete:
+
+            
             # YOUR_CODE_HERE
             sy_logits_na = None
             return sy_logits_na
