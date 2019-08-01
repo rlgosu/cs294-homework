@@ -71,6 +71,19 @@ def descale_signed(data, minv, maxv): # value 0 is preserved even after rescale
     
     return data * (maxv + 1e-7)
 
+def scale_zscore(data, mu=None, sigma=None):
+    avg = np.mean(data, 0)
+    avg = avg if mu is None else avg - mu
+    std = np.std(data, 0) if sigma is None else sigma
+
+    numerator = data - avg
+    denominator = std + 1e-7
+    # noise term prevents the zero division
+    return numerator / denominator, avg, std
+
+def descale_zscore(data, mu, std):
+    return data * sigma + mu
+
 # util
 
 default_random_seed = 777
