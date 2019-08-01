@@ -73,6 +73,8 @@ def descale_signed(data, minv, maxv): # value 0 is preserved even after rescale
 
 # util
 
+default_random_seed = 777
+
 NO_RESCALE = { 'minx':-1, 'maxx':-1, 'miny':-1, 'maxy':-1 } 
 RESCALE_X = { 'minx':None, 'maxx':None, 'miny':-1, 'maxy':-1 } 
 RESCALE_XY = None
@@ -85,9 +87,28 @@ def shuffle_XY(X, Y) :
     _, new_X, new_Y = np.split(hstacked, (0, X.shape[1]), axis=-1)
     return new_X, new_Y
 
+def build_hypothesis(input_placeholder, output_size, scope_name, n_layers, size, activation=tf.tanh, output_activation=None) :
+    g = tf.get_default_graph()
+    # build the network
+    with g.as_default() :
+        with tf.variable_scope(scope_name, reuse=tf.AUTO_REUSE) as scope:
+            neurons = [ size for _ in range(n_layers) ]
+            layer = input_placeholder
+
+            for i in range(len(neurons)) :
+                neuron = neurons[i]
+
+                layer = tf.layers.dense(layer, neuron,
+                                        kernel_initializer = tf.contrib.layers.xavier_initializer(seed=default_random_seed),
+                                        activation=activation,
+                                        name = 'layer-' + str(i))
+            layer = tf.layers.dense(layer, output_size,
+                                    kernel_initializer = tf.contrib.layers.xavier_initializer(seed=default_random_seed),
+                                    activation=output_activation,
+                                    name = 'layer-last')
+    return layer
 
 class MultiLayerPerceptron(object) :
-    default_random_seed = 777
 
     default_model_config = dict(neurons = [400, 200],
                                 activation = tf.nn.elu, # Using ReLu, which is a discontinuous function, may raise issues. Try using other activation functions, such as tanh or sigmoid.
@@ -145,11 +166,11 @@ class MultiLayerPerceptron(object) :
         else :
             self.session = session
 
-    def build_network(self, input_placeholder = None) :
+    def build_hypothesis(self, input_placeholder = None) :
         g = tf.get_default_graph()
 
         # build the network
-        with g.as_default(), self.session.as_default() :
+        with g.as_default() :
             if input_placeholder is not None :
                 self.X = input_placeholder
             else :
@@ -160,7 +181,7 @@ class MultiLayerPerceptron(object) :
             self.p_training = tf.placeholder(tf.bool, name='p_training')
             self.p_lr = tf.placeholder(tf.float32, name='learning_rate')
 
-            with tf.variable_scope(self.scope_name + '-dnn', reuse=tf.AUTO_REUSE) as scope:
+            with tf.variable_scope(self.scope_name + '-mlp', reuse=tf.AUTO_REUSE) as scope:
                 neurons = self.model_config['neurons']
                 layer = self.X
                 layer = tf.layers.dropout(layer, rate=1-self.p_keep_prob_input, training=self.p_training)
@@ -180,23 +201,27 @@ class MultiLayerPerceptron(object) :
                     
 
                 self.hypothesis = layer
-                cost_fn = self.model_config['cost_function']
-                self.cost = cost_fn(self.Y, self.hypothesis)
-                tf.summary.scalar("cost", self.cost)
-                measure_alg = self.model_config['measure_function']
-                if measure_alg == 'r_squared' :
-                    self.measure = self.r_squared(self.Y, self.hypothesis)
-                elif measure_alg == 'smape' :
-                    self.measure = self.smape(self.Y, self.hypothesis)
-                else :
-                    self.measure = None
-                optimizer_fn = self.model_config['optimizer']
-                opt = optimizer_fn(learning_rate=self.p_lr)
-                self.objective_tensor = opt.minimize(self.cost)
+        return self.hypothesis
 
-            if not self.restore_mode :
-                self.session.run(tf.global_variables_initializer())
+    def build_objective(self) :
+        cost_fn = self.model_config['cost_function']
+        self.cost = cost_fn(self.Y, self.hypothesis)
+        tf.summary.scalar("cost", self.cost)
+        measure_alg = self.model_config['measure_function']
+        if measure_alg == 'r_squared' :
+            self.measure = self.r_squared(self.Y, self.hypothesis)
+        elif measure_alg == 'smape' :
+            self.measure = self.smape(self.Y, self.hypothesis)
+        else :
+            self.measure = None
+        optimizer_fn = self.model_config['optimizer']
+        opt = optimizer_fn(learning_rate=self.p_lr)
+        self.objective_tensor = opt.minimize(self.cost)
 
+    def initialize_variables(self) :
+        with self.session.as_default() :
+            # if not self.restore_mode :
+            self.session.run(tf.global_variables_initializer())
 
     def train(self, X, Y, rescale_factor=None, train_config = MultiLayerPerceptron.default_train_config, scale_fn=scale_minmax) :
         learning_rate = train_config['start_learning_rate']

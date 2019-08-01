@@ -11,7 +11,7 @@ import os
 import time
 import inspect
 from multiprocessing import Process
-from mlp import MultiLayerPerceptron
+import mlp
 
 #============================================================================================#
 # Utilities
@@ -39,15 +39,8 @@ def build_mlp(input_placeholder, output_size, scope, n_layers, size, activation=
         Hint: use tf.layers.dense    
     """
     # YOUR CODE HERE
-    model_config = MultiLayerPerceptron.default_model_config.copy()
-    model_config[neurons] = [ size for _ in range(n_layers) ]
-    model_config[activation] = activation
-    model_config[last_activation] = output_activation
-    mlp = MultiLayerPerceptron(model_config = model_config, scope_name = scope)
-    mlp.build_network(input_placeholder = input_placeholder)
-    output_placeholder = mlp.Y
-    # raise NotImplementedError
-    return output_placeholder
+    return mlp.build_hypothesis(input_placeholder, output_size, scope, n_layers, size,
+                                activation=tf.tanh, output_activation=output_activation)
 
 def pathlength(path):
     return len(path["reward"])
@@ -145,15 +138,17 @@ class Agent(object):
         """
         # raise NotImplementedError
         if self.discrete:
-
-            
             # YOUR_CODE_HERE
-            sy_logits_na = None
+            ac_hypothesis = build_mlp(sy_ob_no, self.ac_dim, 'mlp', self.n_layers, self.size, activation=tf.tanh)
+            sy_logits_na = ac_hypothesis # tf.nn.softmax(ac_hypothesis)
             return sy_logits_na
         else:
             # YOUR_CODE_HERE
-            sy_mean = None
-            sy_logstd = None
+            ac_hypothesis = build_mlp(sy_ob_no, self.ac_dim, 'mlp', self.n_layers, self.size, activation=tf.tanh)
+            sy_mean = ac_hypothesis
+            sy_logstd = tf.get_variable('logstd', shape=[ self.ac_dim ],
+                                        initializer = tf.zeros_initializer,
+                                        dtype=tf.float32)
             return (sy_mean, sy_logstd)
 
     #========================================================================================#
@@ -183,15 +178,16 @@ class Agent(object):
         
                  This reduces the problem to just sampling z. (Hint: use tf.random_normal!)
         """
-        raise NotImplementedError
+        # raise NotImplementedError
         if self.discrete:
             sy_logits_na = policy_parameters
             # YOUR_CODE_HERE
-            sy_sampled_ac = None
+            dist = tfp.distributions.Categorical(sy_logits_na)
+            sy_sampled_ac = dist.sample()
         else:
             sy_mean, sy_logstd = policy_parameters
             # YOUR_CODE_HERE
-            sy_sampled_ac = None
+            sy_sampled_ac = tf.random.normal(shape=tf.shape(sy_mean), mean=sy_mean, stddev=tf.exp(sy_logstd))
         return sy_sampled_ac
 
     #========================================================================================#
@@ -220,15 +216,17 @@ class Agent(object):
                 For the discrete case, use the log probability under a categorical distribution.
                 For the continuous case, use the log probability under a multivariate gaussian.
         """
-        raise NotImplementedError
+        # raise NotImplementedError
         if self.discrete:
             sy_logits_na = policy_parameters
             # YOUR_CODE_HERE
-            sy_logprob_n = None
+            dist = tfp.distributions.Categorical(sy_logits_na)
+            sy_logprob_n = dist.log_prob()
         else:
             sy_mean, sy_logstd = policy_parameters
             # YOUR_CODE_HERE
-            sy_logprob_n = None
+            dist = tfp.distributions.MultivariateNormalDiag(loc=sy_mean, scale_diag=tf.exp(sy_logstd))
+            sy_logprob_n = dist.log_prob()
         return sy_logprob_n
 
     def build_computation_graph(self):
@@ -269,7 +267,7 @@ class Agent(object):
         #                           ----------PROBLEM 2----------
         # Loss Function and Training Operation
         #========================================================================================#
-        loss = None # YOUR CODE HERE
+        loss = tf.reduce_sum(tf.multiply(self.sy_logprob_n, tf.sy_adv_n)) # YOUR CODE HERE
         self.update_op = tf.train.AdamOptimizer(self.learning_rate).minimize(loss)
 
         #========================================================================================#
@@ -317,8 +315,10 @@ class Agent(object):
             #====================================================================================#
             #                           ----------PROBLEM 3----------
             #====================================================================================#
-            raise NotImplementedError
-            ac = None # YOUR CODE HERE
+            # raise NotImplementedError
+            # ac = None # YOUR CODE HERE
+            ac = self.sample_action([ob])
+            
             ac = ac[0]
             acs.append(ac)
             ob, rew, done, _ = env.step(ac)
