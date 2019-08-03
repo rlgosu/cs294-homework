@@ -392,23 +392,34 @@ class Agent(object):
             Store the Q-values for all timesteps and all trajectories in a variable 'q_n',
             like the 'ob_no' and 'ac_na' above. 
         """
-        if self.reward_to_go:
-            num_paths = len(re_n)
-            q_n = np.empty(num_paths)
-            gamma = 1.0
-            total = 0.0
-            for t in reversed(range(num_paths)) :
-                q_n[t] = total + gamma * re_n[t]
-                gamma *= self.gamma
-                total += q_n[t]
-        else:
-            num_paths = len(re_n)
-            gamma = 1.0
-            total = 0.0
-            for t in range(num_paths) :
-                total += gamma * re_n[t]
-                gamma *= self.gamma
-            q_n = np.full(num_paths, total)
+
+        num_paths = len(re_n) # num_paths means number of trajectories
+        q_n = []
+
+        for re in re_n : 
+            if self.reward_to_go:
+                gamma = 1.0
+                total = 0.0
+
+                sub_q = np.empty(len(re))
+                for t in reversed(range(len(re))) :
+                    sub_q[t] = total + gamma * re[t]
+                    gamma *= self.gamma
+                    total += sub_q[t]
+
+                for q_t in sub_q :
+                    q_n.append(q_t)
+            else:
+                gamma = 1.0
+                total = 0.0
+                for t in range(len(re)) :
+                    total += gamma * re[t]
+                    gamma *= self.gamma
+
+                for _ in range(len(re)) :
+                    q_n.append(total)
+
+        print('sum of path lengths :', np.shape(q_n))
         return q_n
 
     def compute_advantage(self, ob_no, q_n):
