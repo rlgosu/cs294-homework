@@ -580,6 +580,8 @@ def train_PG(
     ob_dim = env.observation_space.shape[0]
     ac_dim = env.action_space.n if discrete else env.action_space.shape[0]
 
+    print('ob_dim :', ob_dim, ', ac_dim:', ac_dim)
+
     #========================================================================================#
     # Initialize Agent
     #========================================================================================#
@@ -605,6 +607,9 @@ def train_PG(
         'normalize_advantages': normalize_advantages,
     }
 
+    print('computation_graph_args :', computation_graph_args, ', sample_trajectory_args:', sample_trajectory_args,
+          ', estimate_return_args', estimate_return_args)
+    
     agent = Agent(computation_graph_args, sample_trajectory_args, estimate_return_args)
 
     # build computation graph
