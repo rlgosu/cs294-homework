@@ -175,11 +175,12 @@ class Agent(object):
         """
         if self.discrete:
             sy_logits_na = policy_parameters
-            print('sy_logits_na :', sy_logits_na, ', shape:', np.shape(sy_logits_na))
+            print('sy_logits_na shape:', np.shape(sy_logits_na))
             dist = tfp.distributions.Categorical(logits=sy_logits_na)
             # dist = tfp.distributions.Categorical(logits=tf.reshape(sy_logits_na, [-1])) # reshape to flatten
             # dist = tfp.distributions.Categorical(logits=sy_logits_na.flatten()) # reshape to flatten
             sy_sampled_ac = dist.sample()
+            print('sy_sampled_ac shape:', np.shape(sy_sampled_ac))
         else:
             sy_mean, sy_logstd = policy_parameters
             sy_sampled_ac = tf.random.normal(shape=tf.shape(sy_mean), mean=sy_mean, stddev=tf.exp(sy_logstd))
@@ -213,10 +214,11 @@ class Agent(object):
         """
         if self.discrete:
             sy_logits_na = policy_parameters
-            print('sy_logits_na:', sy_logits_na)
+            print('sy_logits_na:', np.shape(sy_logits_na))
             dist = tfp.distributions.Categorical(logits=sy_logits_na) # reshape to flatten
             # dist = tfp.distributions.Categorical(logits=tf.reshape(sy_logits_na, [-1])) # reshape to flatten
             sy_logprob_n = dist.log_prob(sy_ac_na)
+            print('sy_logprob_n shape:', np.shape(sy_logprob_n))
         else:
             sy_mean, sy_logstd = policy_parameters
             dist = tfp.distributions.MultivariateNormalDiag(loc=sy_mean, scale_diag=tf.exp(sy_logstd))
@@ -310,7 +312,7 @@ class Agent(object):
             #====================================================================================#
             # print('ob:', ob, ',obs:', obs)
             ac = self.sy_sampled_ac.eval(feed_dict= { self.sy_ob_no : [ ob ] } )
-            # print('ac:', ac)
+            print('ac sampled shape :', np.shape(ac))
             acs.append(ac)
             # print('action_space:', env.env.action_space)
             ob, rew, done, _ = env.step(ac[0])
@@ -420,7 +422,7 @@ class Agent(object):
                     q_n.append(total)
 
         # print('sum of path lengths :', np.shape(q_n))
-        return np.array(q_n)
+        return q_n
 
     def compute_advantage(self, ob_no, q_n):
         """
@@ -540,9 +542,9 @@ class Agent(object):
 
         targets = [ self.update_op ]
         feed_dict = {
-            self.sy_ob_no : ob_no,
-            self.sy_ac_na : ac_na,
-            self.sy_adv_n : adv_n
+            self.sy_ob_no : np.array(ob_no, dtype=np.float32),
+            self.sy_ac_na : np.array(ac_na, dtype=np.float32),
+            self.sy_adv_n : np.array(adv_n, dtype=np.float32)
             }
         # print('feed_dict:', feed_dict)
         try :
