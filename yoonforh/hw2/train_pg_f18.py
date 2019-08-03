@@ -135,6 +135,7 @@ class Agent(object):
         """
         if self.discrete:
             ac_hypothesis = build_mlp(sy_ob_no, self.ac_dim, 'mlp', self.n_layers, self.size, activation=tf.tanh)
+            print('ac_hypothesis:', ac_hypothesis)
             sy_logits_na = ac_hypothesis # tf.nn.softmax(ac_hypothesis)
             return sy_logits_na
         else:
@@ -174,8 +175,9 @@ class Agent(object):
         """
         if self.discrete:
             sy_logits_na = policy_parameters
-            print('sy_logits_na :', sy_logits_na)
-            dist = tfp.distributions.Categorical(logits=tf.reshape(sy_logits_na, [-1])) # reshape to flatten
+            print('sy_logits_na :', sy_logits_na, ', shape:', np.shape(sy_logits_na))
+            dist = tfp.distributions.Categorical(logits=sy_logits_na)
+            # dist = tfp.distributions.Categorical(logits=tf.reshape(sy_logits_na, [-1])) # reshape to flatten
             # dist = tfp.distributions.Categorical(logits=sy_logits_na.flatten()) # reshape to flatten
             sy_sampled_ac = dist.sample()
         else:
@@ -212,7 +214,8 @@ class Agent(object):
         if self.discrete:
             sy_logits_na = policy_parameters
             print('sy_logits_na:', sy_logits_na)
-            dist = tfp.distributions.Categorical(logits=tf.reshape(sy_logits_na, [-1])) # reshape to flatten
+            dist = tfp.distributions.Categorical(logits=sy_logits_na) # reshape to flatten
+            # dist = tfp.distributions.Categorical(logits=tf.reshape(sy_logits_na, [-1])) # reshape to flatten
             sy_logprob_n = dist.log_prob(sy_ac_na)
         else:
             sy_mean, sy_logstd = policy_parameters
@@ -306,12 +309,11 @@ class Agent(object):
             #                           ----------PROBLEM 3----------
             #====================================================================================#
             print('ob:', ob, ',obs:', obs)
-            ac = self.sample_action(ob).eval()
+            ac = self.sy_sampled_ac.eval(feed_dict= { self.sy_ob_no : [ ob ] } )
             print('ac:', ac)
-            # ac = ac[0]
             acs.append(ac)
             print('action_space:', env.env.action_space)
-            ob, rew, done, _ = env.step(ac)
+            ob, rew, done, _ = env.step(ac[0])
             rewards.append(rew)
             steps += 1
             if done or steps > self.max_path_length:
@@ -478,6 +480,8 @@ class Agent(object):
         return q_n, adv_n
 
     def update_parameters(self, ob_no, ac_na, q_n, adv_n):
+        print('update_parameters(ob_no:', ob_no, ',ac_na:', ac_na,
+              ',q_n:', q_n, ',adv_n:', adv_n, ')')
         """ 
             Update the parameters of the policy and (possibly) the neural network baseline, 
             which is trained to approximate the value function.
@@ -634,6 +638,10 @@ def train_PG(
         ac_na = np.concatenate([path["action"] for path in paths])
         re_n = [path["reward"] for path in paths]
 
+        print('ob_no:', np.shape(ob_no))
+        print('ac_na:', np.shape(ac_na))
+        print('re_n:', np.shape(re_n))
+        
         q_n, adv_n = agent.estimate_return(ob_no, re_n)
         agent.update_parameters(ob_no, ac_na, q_n, adv_n)
 
