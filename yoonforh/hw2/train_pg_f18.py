@@ -697,7 +697,11 @@ def main():
                 )
         # # Awkward hacky process runs, because Tensorflow does not like
         # # repeatedly calling train_PG in the same thread.
-        p = Process(target=train_func, args=tuple())
+        # p = Process(target=train_func, args=tuple())
+        argv_tuple = (args.exp_name, args.env_name, args.n_iter, args.discount, args.batch_size,
+                      max_path_length, args.learning_rate, args.reward_to_go, args.render, os.path.join(logdir,'%d'%seed),
+                      not(args.dont_normalize_advantages),  args.nn_baseline, seed, args.n_layers, args.size)
+        p = Process(target=train_PG, args=argv_tuple)
         p.start()
         processes.append(p)
         # if you comment in the line below, then the loop will block 
