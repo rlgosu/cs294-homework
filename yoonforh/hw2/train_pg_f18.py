@@ -420,7 +420,7 @@ class Agent(object):
                     q_n.append(total)
 
         # print('sum of path lengths :', np.shape(q_n))
-        return q_n
+        return np.array(q_n)
 
     def compute_advantage(self, ob_no, q_n):
         """
