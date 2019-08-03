@@ -5,6 +5,7 @@ Adapted for CS294-112 Fall 2018 by Michael Chang and Soroush Nasiriany
 """
 import numpy as np
 import tensorflow as tf
+import tensorflow_probability as tfp # tensorflow-probability
 import gym
 import logz
 import os
@@ -173,7 +174,9 @@ class Agent(object):
         """
         if self.discrete:
             sy_logits_na = policy_parameters
-            dist = tfp.distributions.Categorical(sy_logits_na)
+            print('sy_logits_na :', sy_logits_na)
+            dist = tfp.distributions.Categorical(logits=tf.reshape(sy_logits_na, [-1])) # reshape to flatten
+            # dist = tfp.distributions.Categorical(logits=sy_logits_na.flatten()) # reshape to flatten
             sy_sampled_ac = dist.sample()
         else:
             sy_mean, sy_logstd = policy_parameters
@@ -208,12 +211,13 @@ class Agent(object):
         """
         if self.discrete:
             sy_logits_na = policy_parameters
-            dist = tfp.distributions.Categorical(sy_logits_na)
-            sy_logprob_n = dist.log_prob()
+            print('sy_logits_na:', sy_logits_na)
+            dist = tfp.distributions.Categorical(logits=tf.reshape(sy_logits_na, [-1])) # reshape to flatten
+            sy_logprob_n = dist.log_prob(sy_ac_na)
         else:
             sy_mean, sy_logstd = policy_parameters
             dist = tfp.distributions.MultivariateNormalDiag(loc=sy_mean, scale_diag=tf.exp(sy_logstd))
-            sy_logprob_n = dist.log_prob()
+            sy_logprob_n = dist.log_prob(sy_ac_na)
         return sy_logprob_n
 
     def build_computation_graph(self):
@@ -254,7 +258,7 @@ class Agent(object):
         #                           ----------PROBLEM 2----------
         # Loss Function and Training Operation
         #========================================================================================#
-        loss = tf.reduce_sum(tf.multiply(self.sy_logprob_n, tf.sy_adv_n))
+        loss = tf.reduce_sum(tf.multiply(self.sy_logprob_n, self.sy_adv_n))
         self.update_op = tf.train.AdamOptimizer(self.learning_rate).minimize(loss)
 
         #========================================================================================#
@@ -301,10 +305,12 @@ class Agent(object):
             #====================================================================================#
             #                           ----------PROBLEM 3----------
             #====================================================================================#
-            ac = self.sample_action([ob])
-            
-            ac = ac[0]
+            print('ob:', ob, ',obs:', obs)
+            ac = self.sample_action(ob).eval()
+            print('ac:', ac)
+            # ac = ac[0]
             acs.append(ac)
+            print('action_space:', env.env.action_space)
             ob, rew, done, _ = env.step(ac)
             rewards.append(rew)
             steps += 1
@@ -524,6 +530,7 @@ class Agent(object):
             self.sy_ac_na : ac_na,
             self.sy_adv_n : adv_n
             }
+        print('feed_dict:', feed_dict)
         _ = self.sess.run(targets, feed_dict=feed_dict)
 
 
