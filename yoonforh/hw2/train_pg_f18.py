@@ -518,9 +518,13 @@ class Agent(object):
         # For debug purposes, you may wish to save the value of the loss function before
         # and after an update, and then log them below. 
 
-        # YOUR_CODE_HERE
-        # GO GO GO
-        raise NotImplementedError
+        targets = [ self.update_op ]
+        feed_dict = {
+            self.sy_ob_no : ob_no,
+            self.sy_ac_na : ac_na,
+            self.sy_adv_n : adv_n
+            }
+        _ = self.sess.run(targets, feed_dict=feed_dict)
 
 
 def train_PG(
