@@ -175,7 +175,7 @@ class Agent(object):
         """
         if self.discrete:
             sy_logits_na = policy_parameters
-            # print('sy_logits_na :', sy_logits_na, ', shape:', np.shape(sy_logits_na))
+            print('sy_logits_na :', sy_logits_na, ', shape:', np.shape(sy_logits_na))
             dist = tfp.distributions.Categorical(logits=sy_logits_na)
             # dist = tfp.distributions.Categorical(logits=tf.reshape(sy_logits_na, [-1])) # reshape to flatten
             # dist = tfp.distributions.Categorical(logits=sy_logits_na.flatten()) # reshape to flatten
@@ -213,7 +213,7 @@ class Agent(object):
         """
         if self.discrete:
             sy_logits_na = policy_parameters
-            # print('sy_logits_na:', sy_logits_na)
+            print('sy_logits_na:', sy_logits_na)
             dist = tfp.distributions.Categorical(logits=sy_logits_na) # reshape to flatten
             # dist = tfp.distributions.Categorical(logits=tf.reshape(sy_logits_na, [-1])) # reshape to flatten
             sy_logprob_n = dist.log_prob(sy_ac_na)
@@ -545,7 +545,11 @@ class Agent(object):
             self.sy_adv_n : adv_n
             }
         # print('feed_dict:', feed_dict)
-        _ = self.sess.run(targets, feed_dict=feed_dict)
+        try :
+            _ = self.sess.run(targets, feed_dict=feed_dict)
+        except ValueError as e :
+            print('valueerror:', e, ', feed_dict:', feed_dict)
+            raise e
 
 
 def train_PG(
