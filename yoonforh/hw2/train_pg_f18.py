@@ -311,14 +311,18 @@ class Agent(object):
             #                           ----------PROBLEM 3----------
             #====================================================================================#
             # print('ob:', ob, ',obs:', obs)
-            ac = self.sess.run(self.sy_sampled_ac, feed_dict= { self.sy_ob_no : np.expand_dims(ob, 0) } )
+            params, ac = self.sess.run([self.policy_parameters, self.sy_sampled_ac], feed_dict= { self.sy_ob_no : np.expand_dims(ob, 0) } )
+            # ac = self.sy_sampled_ac.eval(feed_dict= { self.sy_ob_no : [ ob ] } )
+            # ac = self.sy_sampled_ac.eval(feed_dict= { self.sy_ob_no : np.expand_dims(ob, 0) } )
             # print('ac sampled shape :', np.shape(ac), ', ob shape :', np.shape(ob))
             acs.append(ac)
             # print('action_space:', env.env.action_space)
             try :
                 ob, rew, done, _ = env.step(ac[0])
             except AssertionError as e :
-                print('assertion error:', e, ', ac:', ac, ', ac[0]:', ac[0], ', shape:', np.shape(ac))
+                print('assertion error:', e, ', ac:', ac, ', ac[0]:', ac[0], ', shape:', np.shape(ac),
+                      ', obs:', obs, ', ob:', ob, ', type(ob):', type(ob),
+                      ', params:', params, ', type(params):', type(params))                
                 raise e
             
             rewards.append(rew)
