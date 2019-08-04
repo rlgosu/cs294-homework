@@ -489,7 +489,9 @@ class Agent(object):
                     advantages whose length is the sum of the lengths of the paths
         """
         q_n = self.sum_of_rewards(re_n)
+        # print('after sum_of_rewards, q_n:', np.shape(q_n))
         adv_n = self.compute_advantage(ob_no, q_n)
+        # print('after compute_advantage, adv_n:', np.shape(adv_n))
         #====================================================================================#
         #                           ----------PROBLEM 3----------
         # Advantage Normalization
@@ -498,7 +500,7 @@ class Agent(object):
             # On the next line, implement a trick which is known empirically to reduce variance
             # in policy gradient methods: normalize adv_n to have mean zero and std=1.
 
-            adv_n = mlp.scale_zscore(adv_n, sigma=1.0)
+            adv_n, _, _ = mlp.scale_zscore(adv_n, sigma=1.0)
         return q_n, adv_n
 
     def update_parameters(self, ob_no, ac_na, q_n, adv_n):
@@ -675,6 +677,9 @@ def train_PG(
         ac_na = np.array(ac_na).flatten()
         
         q_n, adv_n = agent.estimate_return(ob_no, re_n)
+        # print('q_n:', np.shape(q_n))
+        # print('adv_n:', np.shape(adv_n))
+        
         agent.update_parameters(ob_no, ac_na, q_n, adv_n)
 
         # Log diagnostics
