@@ -312,7 +312,7 @@ class Agent(object):
             #====================================================================================#
             # print('ob:', ob, ',obs:', obs)
             ac = self.sy_sampled_ac.eval(feed_dict= { self.sy_ob_no : [ ob ] } )
-            print('ac sampled shape :', np.shape(ac))
+            # print('ac sampled shape :', np.shape(ac), ', ob shape :', np.shape(ob))
             acs.append(ac)
             # print('action_space:', env.env.action_space)
             ob, rew, done, _ = env.step(ac[0])
@@ -541,12 +541,17 @@ class Agent(object):
         # and after an update, and then log them below. 
 
         targets = [ self.update_op ]
-        feed_dict = {
-            self.sy_ob_no : np.array(ob_no, dtype=np.float32),
-            self.sy_ac_na : np.array(ac_na, dtype=np.float32),
-            self.sy_adv_n : np.array(adv_n, dtype=np.float32)
+        try :
+            feed_dict = {
+                self.sy_ob_no : np.array(ob_no, dtype=np.float32),
+                self.sy_ac_na : np.array(ac_na, dtype=np.float32),
+                self.sy_adv_n : np.array(adv_n)
             }
-        # print('feed_dict:', feed_dict)
+            # print('feed_dict:', feed_dict)
+        except ValueError as e :
+            print('valueerror:', e, np.shape(ob_no), np.shape(ac_na), np.shape(adv_n))
+            raise e
+        
         try :
             _ = self.sess.run(targets, feed_dict=feed_dict)
         except ValueError as e :
