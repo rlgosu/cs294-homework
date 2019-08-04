@@ -315,7 +315,12 @@ class Agent(object):
             # print('ac sampled shape :', np.shape(ac), ', ob shape :', np.shape(ob))
             acs.append(ac)
             # print('action_space:', env.env.action_space)
-            ob, rew, done, _ = env.step(ac[0])
+            try :
+                ob, rew, done, _ = env.step(ac[0])
+            except AssertionError as e :
+                print('assertion error:', e, ', ac:', ac, ', ac[0]:', ac[0], ', shape:', np.shape(ac))
+                raise e
+            
             rewards.append(rew)
             steps += 1
             if done or steps > self.max_path_length:
@@ -550,6 +555,9 @@ class Agent(object):
             # print('feed_dict:', feed_dict)
         except ValueError as e :
             print('valueerror:', e, np.shape(ob_no), np.shape(ac_na), np.shape(adv_n))
+            print('ob_no:', np.array(ob_no, dtype=np.float32))
+            print('ac_na:', np.array(ac_na, dtype=np.float32))
+            print('adv_n:', np.array(adv_n))
             raise e
         
         try :
