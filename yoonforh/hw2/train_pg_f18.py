@@ -311,7 +311,7 @@ class Agent(object):
             #                           ----------PROBLEM 3----------
             #====================================================================================#
             # print('ob:', ob, ',obs:', obs)
-            ac = self.sy_sampled_ac.eval(feed_dict= { self.sy_ob_no : [ ob ] } )
+            ac = self.sess.run(self.sy_sampled_ac, feed_dict= { self.sy_ob_no : np.expand_dims(ob, 0) } )
             # print('ac sampled shape :', np.shape(ac), ', ob shape :', np.shape(ob))
             acs.append(ac)
             # print('action_space:', env.env.action_space)
@@ -552,18 +552,16 @@ class Agent(object):
                 self.sy_ac_na : np.array(ac_na, dtype=np.float32),
                 self.sy_adv_n : np.array(adv_n)
             }
-            # print('feed_dict:', feed_dict)
+            
+            _ = self.sess.run(targets, feed_dict=feed_dict)
         except ValueError as e :
-            print('valueerror:', e, np.shape(ob_no), np.shape(ac_na), np.shape(adv_n))
+            print('valueerror:', e, ', feed_dict:', feed_dict) 
+            print('shapes:', np.shape(ob_no), np.shape(ac_na), np.shape(adv_n))
+            print('types:', type(ob_no), type(ac_na), type(adv_n))
+            print('nd types:', type(np.array(ob_no, dtype=np.float32)), type(np.array(ac_na, dtype=np.float32)), type(np.array(adv_n)))
             print('ob_no:', np.array(ob_no, dtype=np.float32))
             print('ac_na:', np.array(ac_na, dtype=np.float32))
             print('adv_n:', np.array(adv_n))
-            raise e
-        
-        try :
-            _ = self.sess.run(targets, feed_dict=feed_dict)
-        except ValueError as e :
-            print('valueerror:', e, ', feed_dict:', feed_dict)
             raise e
 
 
