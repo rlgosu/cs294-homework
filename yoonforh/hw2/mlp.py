@@ -100,23 +100,26 @@ def shuffle_XY(X, Y) :
     _, new_X, new_Y = np.split(hstacked, (0, X.shape[1]), axis=-1)
     return new_X, new_Y
 
-def build_hypothesis(input_placeholder, output_size, scope_name, n_layers, size, activation=tf.tanh, output_activation=None) :
-    g = tf.get_default_graph()
+def build_hypothesis(input_placeholder, output_size, scope_name, n_layers, size,
+                     activation=tf.tanh, output_activation=None) :
     # build the network
-    with g.as_default() :
-        with tf.variable_scope(scope_name, reuse=tf.AUTO_REUSE) as scope:
-            neurons = [ size for _ in range(n_layers) ]
-            layer = input_placeholder
+    layers = []
+    with tf.variable_scope(scope_name, reuse=tf.AUTO_REUSE) as scope:
+        neurons = [ size for _ in range(n_layers) ]
+        layer = input_placeholder
+        layers.append(layer)
 
-            for i in range(len(neurons)) :
-                neuron = neurons[i]
+        for i in range(len(neurons)) :
+            neuron = neurons[i]
 
-                layer = tf.layers.dense(layer, neuron,
-                                        kernel_initializer = tf.contrib.layers.xavier_initializer(seed=default_random_seed),
-                                        activation=activation,
-                                        name = 'layer-' + str(i))
-            layer = tf.layers.dense(layer, output_size,
+            layer = tf.layers.dense(layer, neuron,
                                     kernel_initializer = tf.contrib.layers.xavier_initializer(seed=default_random_seed),
-                                    activation=output_activation,
-                                    name = 'layer-last')
-    return layer
+                                    activation=activation,
+                                    name = 'layer-' + str(i))
+            layers.append(layer)
+        layer = tf.layers.dense(layer, output_size,
+                                kernel_initializer = tf.contrib.layers.xavier_initializer(seed=default_random_seed),
+                                activation=output_activation,
+                                name = 'layer-last')
+        layers.append(layer)
+    return layers
