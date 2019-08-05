@@ -133,13 +133,14 @@ class Agent(object):
                 Pass in self.n_layers for the 'n_layers' argument, and
                 pass in self.size for the 'size' argument.
         """
+        self.layers = build_mlp(sy_ob_no, self.ac_dim, 'mlp', self.n_layers, self.size, activation=tf.tanh)
+        ac_hypothesis = self.layers[-1]
+        
         if self.discrete:
-            ac_hypothesis = build_mlp(sy_ob_no, self.ac_dim, 'mlp', self.n_layers, self.size, activation=tf.tanh)
             # print('ac_hypothesis:', ac_hypothesis)
             sy_logits_na = ac_hypothesis # tf.nn.softmax(ac_hypothesis)
             return sy_logits_na
         else:
-            ac_hypothesis = build_mlp(sy_ob_no, self.ac_dim, 'mlp', self.n_layers, self.size, activation=tf.tanh)
             sy_mean = ac_hypothesis
             sy_logstd = tf.get_variable('logstd', shape=[ self.ac_dim ],
                                         initializer = tf.zeros_initializer,
@@ -311,7 +312,7 @@ class Agent(object):
             #                           ----------PROBLEM 3----------
             #====================================================================================#
             # print('ob:', ob, ',obs:', obs)
-            params, ac = self.sess.run([self.policy_parameters, self.sy_sampled_ac], feed_dict= { self.sy_ob_no : np.expand_dims(ob, 0) } )
+            layers, params, ac = self.sess.run([self.layers, self.policy_parameters, self.sy_sampled_ac], feed_dict= { self.sy_ob_no : np.expand_dims(ob, 0) } )
             # ac = self.sy_sampled_ac.eval(feed_dict= { self.sy_ob_no : [ ob ] } )
             # ac = self.sy_sampled_ac.eval(feed_dict= { self.sy_ob_no : np.expand_dims(ob, 0) } )
             # print('ac sampled shape :', np.shape(ac), ', ob shape :', np.shape(ob))
@@ -321,8 +322,9 @@ class Agent(object):
                 ob, rew, done, _ = env.step(ac[0])
             except AssertionError as e :
                 print('assertion error:', e, ', ac:', ac, ', ac[0]:', ac[0], ', shape:', np.shape(ac),
-                      ', obs:', obs, ', ob:', ob, ', type(ob):', type(ob),
-                      ', params:', params, ', type(params):', type(params))                
+                      ', obs:', obs, ', ob:', ob, ', type(ob):', type(ob), ', shape of sy_ob_no:', np.shape(np.expand_dims(ob, 0)),
+                      ', params:', params, ', type(params):', type(params),
+                      ', layers:', layers, ', self.layers:', self.layers)
                 raise e
             
             rewards.append(rew)
@@ -332,6 +334,7 @@ class Agent(object):
         path = {"observation" : np.array(obs, dtype=np.float32), 
                 "reward" : np.array(rewards, dtype=np.float32), 
                 "action" : np.array(acs, dtype=np.float32)}
+
         return path
 
     #====================================================================================#
@@ -679,7 +682,6 @@ def train_PG(
         q_n, adv_n = agent.estimate_return(ob_no, re_n)
         # print('q_n:', np.shape(q_n))
         # print('adv_n:', np.shape(adv_n))
-        
         agent.update_parameters(ob_no, ac_na, q_n, adv_n)
 
         # Log diagnostics
