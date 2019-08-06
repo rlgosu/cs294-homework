@@ -84,6 +84,11 @@ def scale_zscore(data, mu=None, sigma=None):
 def descale_zscore(data, mu, std):
     return data * sigma + mu
 
+def check_nan(x) :
+    return (x is np.nan or x != x)
+
+def has_nan(x) :
+    return sum(check_nan(x)) > 0
 # util
 
 default_random_seed = 777
@@ -101,7 +106,7 @@ def shuffle_XY(X, Y) :
     return new_X, new_Y
 
 def build_hypothesis(input_placeholder, output_size, scope_name, n_layers, size,
-                     activation=tf.tanh, output_activation=None) :
+                     activation=tf.nn.tanh, output_activation=None) :
     # build the network
     layers = []
     with tf.variable_scope(scope_name, reuse=tf.AUTO_REUSE) as scope:
