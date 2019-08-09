@@ -107,9 +107,12 @@ def shuffle_XY(X, Y) :
 
 def build_hypothesis(input_placeholder, output_size, scope_name, n_layers, size,
                      activation=tf.nn.tanh, output_activation=None) :
+    print('build_hypothesis(input_placeholder = ', np.shape(input_placeholder), ', output_size = ', output_size,
+          ', scope_name = ', scope_name, ', n_layers = ', n_layers, ', size = ', size,
+          ', activation = ', activation, ', output_activation = ', output_activation, ')')
     # build the network
     layers = []
-    with tf.variable_scope(scope_name, reuse=tf.AUTO_REUSE) as scope:
+    with tf.variable_scope(scope_name) as scope:
         neurons = [ size for _ in range(n_layers) ]
         layer = input_placeholder
         layers.append(layer)

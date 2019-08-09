@@ -40,7 +40,7 @@ def build_mlp(input_placeholder, output_size, scope, n_layers, size, activation=
         Hint: use tf.layers.dense    
     """
     return mlp.build_hypothesis(input_placeholder, output_size, scope, n_layers, size,
-                                activation=tf.tanh, output_activation=output_activation)
+                                activation=activation, output_activation=output_activation)
 
 def pathlength(path):
     return len(path["reward"])
@@ -138,7 +138,7 @@ class Agent(object):
         
         if self.discrete:
             # print('ac_hypothesis:', ac_hypothesis)
-            sy_logits_na = tf.nn.softmax(ac_hypothesis) # softmax distribution of actions
+            sy_logits_na = ac_hypothesis
             return sy_logits_na
         else:
             sy_mean = ac_hypothesis
@@ -176,12 +176,13 @@ class Agent(object):
         """
         if self.discrete:
             sy_logits_na = policy_parameters # softmax actions
-            print('sy_logits_na shape:', np.shape(sy_logits_na))
-            dist = tfp.distributions.Categorical(logits=sy_logits_na)
+            action_dist = tf.nn.softmax(sy_logits_na) # softmax distribution of actions
+            # print('sy_logits_na shape:', np.shape(sy_logits_na), np.shape(action_dist))
+            dist = tfp.distributions.Categorical(probs=action_dist)
             # dist = tfp.distributions.Categorical(logits=tf.reshape(sy_logits_na, [-1])) # reshape to flatten
             # dist = tfp.distributions.Categorical(logits=sy_logits_na.flatten()) # reshape to flatten
             sy_sampled_ac = dist.sample()
-            print('sy_sampled_ac shape:', np.shape(sy_sampled_ac))
+            # print('sy_sampled_ac shape:', np.shape(sy_sampled_ac))
         else:
             sy_mean, sy_logstd = policy_parameters
             sy_sampled_ac = tf.random.normal(shape=tf.shape(sy_mean), mean=sy_mean, stddev=tf.exp(sy_logstd))
@@ -215,14 +216,11 @@ class Agent(object):
         """
         if self.discrete:
             sy_logits_na = policy_parameters
-            print('sy_logits_na:', np.shape(sy_logits_na), 'sy_ac_na:', np.shape(sy_ac_na))
-            # dist = tfp.distributions.Categorical(logits=sy_logits_na) # reshape to flatten
-            # sy_logprob_n = dist.log_prob(sy_ac_na)
-            
+            # print('sy_logits_na:', np.shape(sy_logits_na), 'sy_ac_na:', np.shape(sy_ac_na))
             # softmax_cross_entroy_with_logits_v2 computes the cross entropy of the result after applying the softmax function.
             # the value will be negative log probability
             sy_logprob_n = tf.nn.softmax_cross_entropy_with_logits_v2(logits=sy_logits_na, labels=tf.expand_dims(sy_ac_na, -1))
-            print('sy_logprob_n shape:', np.shape(sy_logprob_n))
+            # print('sy_logprob_n shape:', np.shape(sy_logprob_n))
         else:
             sy_mean, sy_logstd = policy_parameters
             dist = tfp.distributions.MultivariateNormalDiag(loc=sy_mean, scale_diag=tf.exp(sy_logstd))
@@ -267,7 +265,8 @@ class Agent(object):
         #                           ----------PROBLEM 2----------
         # Loss Function and Training Operation
         #========================================================================================#
-        self.loss = tf.reduce_sum(tf.multiply(self.sy_logprob_n, self.sy_adv_n))
+        self.loss = tf.reduce_mean(tf.multiply(self.sy_logprob_n, self.sy_adv_n)) # N can differ so, use mean
+        # print('learning rate :', self.learning_rate)
         self.update_op = tf.train.AdamOptimizer(self.learning_rate).minimize(self.loss)
 
         #========================================================================================#
@@ -415,14 +414,12 @@ class Agent(object):
 
         for re in re_n : 
             if self.reward_to_go:
-                gamma = 1.0
-                total = 0.0
+                next_sum = 0.0
 
                 sub_q = np.empty(len(re))
                 for t in reversed(range(len(re))) :
-                    sub_q[t] = total + gamma * re[t]
-                    gamma *= self.gamma
-                    total += sub_q[t]
+                    sub_q[t] = next_sum + re[t]
+                    next_sum = sub_q[t] * self.gamma
 
                 for q_t in sub_q :
                     q_n.append(q_t)
@@ -557,7 +554,7 @@ class Agent(object):
         # For debug purposes, you may wish to save the value of the loss function before
         # and after an update, and then log them below. 
 
-        targets = [ self.sy_logprob_n, self.sy_adv_n, self.loss, self.update_op ]
+        targets = [ self.sy_logprob_n, self.layers[-1], self.sy_adv_n, self.loss, self.update_op ]
         try :
             feed_dict = {
                 self.sy_ob_no : np.array(ob_no, dtype=np.float32),
@@ -565,10 +562,26 @@ class Agent(object):
                 self.sy_adv_n : np.array(adv_n)
             }
             
-            sy_logprob_n, sy_adv_n, loss,  _ = self.sess.run(targets, feed_dict=feed_dict)
-            sy_logprob_n, sy_adv_n = self.sess.run([ self.sy_logprob_n, self.sy_adv_n ], feed_dict=feed_dict) # run forward again. this shows that after backprop by loss function it became nan
-            print('sy_logprob_n:', sy_logprob_n, ', sy_adv_n:', sy_adv_n, ', loss:', loss, 
-                  ', nan?', mlp.has_nan(sy_logprob_n), mlp.has_nan(sy_adv_n))
+            sy_logprob_n, sy_logits_na, sy_adv_n, loss,  _ = self.sess.run(targets, feed_dict=feed_dict)
+            # print('sy_logprob_n:', sy_logprob_n, ', sy_logits_na:', sy_logits_na, ', sy_adv_n:', sy_adv_n, ', loss:', loss,
+            #       ', ph ob_no:', np.array(ob_no, dtype=np.float32),
+            #       ', ph ac_na:', np.array(ac_na, dtype=np.float32),
+            #       ', ph adv_n:', np.array(adv_n),
+            #       ', nan?', mlp.has_nan(sy_logprob_n), mlp.has_nan(sy_logits_na), mlp.has_nan(sy_adv_n))
+            sy_logprob_n2, sy_logits_na2, sy_adv_n2, sy_ac_na2 = self.sess.run([ self.sy_logprob_n, self.layers[-1], self.sy_adv_n, tf.expand_dims(self.sy_ac_na, -1) ], feed_dict=feed_dict) # run forward again. this shows that after backprop by loss function it became nan
+            # print('sy_logprob_n2:', sy_logprob_n2, ', sy_logits_na2:', sy_logits_na2, ', sy_adv_n2:', sy_adv_n2, ', sy_ac_na2:', sy_ac_na2, ', loss:', loss,
+            #       ', shape sy_logprob_n2:', np.shape(sy_logprob_n2),
+            #       ', shape sy_logits_na2:', np.shape(sy_logits_na2),
+            #       ', shape sy_adv_n2:', np.shape(sy_adv_n2),
+            #       ', shape sy_ac_na2:', np.shape(sy_ac_na2),
+            #       ', nan?', mlp.has_nan(sy_logprob_n2), mlp.has_nan(sy_adv_n2))
+            if mlp.has_nan(sy_logprob_n2) :
+                length = int(len(sy_logprob_n2) / 50)
+                for i in range(length) :
+                    upto = 50 * (i+1) if 50 * (i+1) < len(sy_logprob_n2) else len(sy_logprob_n2)
+                    # print('ob_no : ~' + str(i * 50), ob_no[50 * i:upto])
+                    # print('ac_na : ~' + str(i * 50), ac_na[50 * i:upto])
+                    # print('adv_n : ~' + str(i * 50), adv_n[50 * i:upto])
         except ValueError as e :
             print('valueerror:', e, ', feed_dict:', feed_dict) 
             print('shapes:', np.shape(ob_no), np.shape(ac_na), np.shape(adv_n))
