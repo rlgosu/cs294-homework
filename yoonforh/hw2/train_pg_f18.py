@@ -185,7 +185,7 @@ class Agent(object):
             # print('sy_sampled_ac shape:', np.shape(sy_sampled_ac))
         else:
             sy_mean, sy_logstd = policy_parameters
-            sy_sampled_ac = tf.random.normal(shape=tf.shape(sy_mean), mean=sy_mean, stddev=tf.exp(sy_logstd))
+            sy_sampled_ac = sy_mean + tf.multiply(tf.exp(sy_logstd), tf.random.normal(shape=tf.shape(sy_mean)))
         return sy_sampled_ac
 
     #========================================================================================#
@@ -223,7 +223,7 @@ class Agent(object):
             # print('sy_logprob_n shape:', np.shape(sy_logprob_n))
         else:
             sy_mean, sy_logstd = policy_parameters
-            dist = tfp.distributions.MultivariateNormalDiag(loc=sy_mean, scale_diag=tf.exp(sy_logstd))
+            dist = tf.distributions.Normal(loc=sy_mean, scale=tf.exp(sy_logstd))
             sy_logprob_n = dist.log_prob(sy_ac_na)
         return sy_logprob_n
 
@@ -556,18 +556,22 @@ class Agent(object):
 
         targets = [ self.sy_logprob_n, self.layers[-1], self.sy_adv_n, self.loss, self.update_op ]
         try :
+            ac_na_reshaped = np.array(ac_na, dtype=np.float32) if self.discrete else np.reshape(ac_na, (-1, self.ac_dim))
             feed_dict = {
                 self.sy_ob_no : np.array(ob_no, dtype=np.float32),
-                self.sy_ac_na : np.array(ac_na, dtype=np.float32),
+                self.sy_ac_na : ac_na_reshaped,
                 self.sy_adv_n : np.array(adv_n)
             }
             
             sy_logprob_n, sy_logits_na, sy_adv_n, loss,  _ = self.sess.run(targets, feed_dict=feed_dict)
-            # print('sy_logprob_n:', sy_logprob_n, ', sy_logits_na:', sy_logits_na, ', sy_adv_n:', sy_adv_n, ', loss:', loss,
-            #       ', ph ob_no:', np.array(ob_no, dtype=np.float32),
-            #       ', ph ac_na:', np.array(ac_na, dtype=np.float32),
-            #       ', ph adv_n:', np.array(adv_n),
-            #       ', nan?', mlp.has_nan(sy_logprob_n), mlp.has_nan(sy_logits_na), mlp.has_nan(sy_adv_n))
+            print('sy_logprob_n:', sy_logprob_n, ', sy_logits_na:', sy_logits_na, ', sy_adv_n:', sy_adv_n, ', loss:', loss,
+                  ', ph ob_no:', np.array(ob_no, dtype=np.float32),
+                  ', ph ac_na:', np.array(ac_na, dtype=np.float32),
+                  ', ph adv_n:', np.array(adv_n),
+                  ', discrete:', self.discrete,
+                  ', nan?', mlp.has_nan(sy_logprob_n), mlp.has_nan(sy_logits_na), mlp.has_nan(sy_adv_n))
+
+            '''
             sy_logprob_n2, sy_logits_na2, sy_adv_n2, sy_ac_na2 = self.sess.run([ self.sy_logprob_n, self.layers[-1], self.sy_adv_n, tf.expand_dims(self.sy_ac_na, -1) ], feed_dict=feed_dict) # run forward again. this shows that after backprop by loss function it became nan
             # print('sy_logprob_n2:', sy_logprob_n2, ', sy_logits_na2:', sy_logits_na2, ', sy_adv_n2:', sy_adv_n2, ', sy_ac_na2:', sy_ac_na2, ', loss:', loss,
             #       ', shape sy_logprob_n2:', np.shape(sy_logprob_n2),
@@ -582,6 +586,7 @@ class Agent(object):
                     # print('ob_no : ~' + str(i * 50), ob_no[50 * i:upto])
                     # print('ac_na : ~' + str(i * 50), ac_na[50 * i:upto])
                     # print('adv_n : ~' + str(i * 50), adv_n[50 * i:upto])
+            '''
         except ValueError as e :
             print('valueerror:', e, ', feed_dict:', feed_dict) 
             print('shapes:', np.shape(ob_no), np.shape(ac_na), np.shape(adv_n))
