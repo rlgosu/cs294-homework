@@ -223,8 +223,9 @@ class Agent(object):
             # print('sy_logprob_n shape:', np.shape(sy_logprob_n))
         else:
             sy_mean, sy_logstd = policy_parameters
-            dist = tf.distributions.Normal(loc=sy_mean, scale=tf.exp(sy_logstd))
-            sy_logprob_n = dist.log_prob(sy_ac_na)
+            # dist = tfp.distributions.Normal(loc=sy_mean, scale=tf.exp(sy_logstd)) # in case ac_dim is not 1
+            dist = tfp.distributions.MultivariateNormalDiag(loc=sy_mean, scale_diag=tf.exp(sy_logstd))
+            sy_logprob_n = -dist.log_prob(sy_ac_na)
         return sy_logprob_n
 
     def build_computation_graph(self):
@@ -564,12 +565,14 @@ class Agent(object):
             }
             
             sy_logprob_n, sy_logits_na, sy_adv_n, loss,  _ = self.sess.run(targets, feed_dict=feed_dict)
+            '''
             print('sy_logprob_n:', sy_logprob_n, ', sy_logits_na:', sy_logits_na, ', sy_adv_n:', sy_adv_n, ', loss:', loss,
                   ', ph ob_no:', np.array(ob_no, dtype=np.float32),
                   ', ph ac_na:', np.array(ac_na, dtype=np.float32),
                   ', ph adv_n:', np.array(adv_n),
                   ', discrete:', self.discrete,
                   ', nan?', mlp.has_nan(sy_logprob_n), mlp.has_nan(sy_logits_na), mlp.has_nan(sy_adv_n))
+            '''
 
             '''
             sy_logprob_n2, sy_logits_na2, sy_adv_n2, sy_ac_na2 = self.sess.run([ self.sy_logprob_n, self.layers[-1], self.sy_adv_n, tf.expand_dims(self.sy_ac_na, -1) ], feed_dict=feed_dict) # run forward again. this shows that after backprop by loss function it became nan
