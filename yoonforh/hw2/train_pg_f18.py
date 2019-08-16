@@ -176,13 +176,16 @@ class Agent(object):
         """
         if self.discrete:
             sy_logits_na = policy_parameters # softmax actions
-            action_dist = tf.nn.softmax(sy_logits_na) # softmax distribution of actions
-            # print('sy_logits_na shape:', np.shape(sy_logits_na), np.shape(action_dist))
-            dist = tfp.distributions.Categorical(probs=action_dist)
+            print('sy_logits_na shape:', np.shape(sy_logits_na))
+            # action_dist = tf.nn.softmax(sy_logits_na) # softmax distribution of actions
+            # dist = tfp.distributions.Categorical(probs=action_dist)
             # dist = tfp.distributions.Categorical(logits=tf.reshape(sy_logits_na, [-1])) # reshape to flatten
-            # dist = tfp.distributions.Categorical(logits=sy_logits_na.flatten()) # reshape to flatten
+            dist = tfp.distributions.Categorical(logits=sy_logits_na)
             sy_sampled_ac = dist.sample()
-            # print('sy_sampled_ac shape:', np.shape(sy_sampled_ac))
+            '''
+            sy_sampled_ac = tf.random.multinomial(logits=sy_logits_na, num_samples=1)
+            '''
+            print('sy_sampled_ac shape:', np.shape(sy_sampled_ac))
         else:
             sy_mean, sy_logstd = policy_parameters
             sy_sampled_ac = sy_mean + tf.multiply(tf.exp(sy_logstd), tf.random.normal(shape=tf.shape(sy_mean)))
@@ -216,16 +219,16 @@ class Agent(object):
         """
         if self.discrete:
             sy_logits_na = policy_parameters
-            # print('sy_logits_na:', np.shape(sy_logits_na), 'sy_ac_na:', np.shape(sy_ac_na))
+            print('sy_logits_na:', np.shape(sy_logits_na), 'sy_ac_na:', np.shape(sy_ac_na))
             # softmax_cross_entroy_with_logits_v2 computes the cross entropy of the result after applying the softmax function.
             # the value will be negative log probability
-            sy_logprob_n = tf.nn.softmax_cross_entropy_with_logits_v2(logits=sy_logits_na, labels=tf.expand_dims(sy_ac_na, -1))
-            # print('sy_logprob_n shape:', np.shape(sy_logprob_n))
+            sy_logprob_n = -tf.nn.softmax_cross_entropy_with_logits_v2(logits=sy_logits_na, labels=tf.expand_dims(sy_ac_na, -1))
+            print('sy_logprob_n shape:', np.shape(sy_logprob_n))
         else:
             sy_mean, sy_logstd = policy_parameters
             # dist = tfp.distributions.Normal(loc=sy_mean, scale=tf.exp(sy_logstd)) # in case ac_dim is not 1
             dist = tfp.distributions.MultivariateNormalDiag(loc=sy_mean, scale_diag=tf.exp(sy_logstd))
-            sy_logprob_n = -dist.log_prob(sy_ac_na)
+            sy_logprob_n = dist.log_prob(sy_ac_na)
         return sy_logprob_n
 
     def build_computation_graph(self):
@@ -266,7 +269,7 @@ class Agent(object):
         #                           ----------PROBLEM 2----------
         # Loss Function and Training Operation
         #========================================================================================#
-        self.loss = tf.reduce_mean(tf.multiply(self.sy_logprob_n, self.sy_adv_n)) # N can differ so, use mean
+        self.loss = tf.reduce_mean(-tf.multiply(self.sy_logprob_n, self.sy_adv_n)) # N can differ so, use mean
         # print('learning rate :', self.learning_rate)
         self.update_op = tf.train.AdamOptimizer(self.learning_rate).minimize(self.loss)
 
@@ -278,16 +281,15 @@ class Agent(object):
         # neural network baseline. These will be used to fit the neural network baseline. 
         #========================================================================================#
         if self.nn_baseline:
-            self.baseline_prediction = tf.squeeze(build_mlp(
-                                    self.sy_ob_no, 
-                                    1, 
-                                    "nn_baseline",
-                                    n_layers=self.n_layers,
-                                    size=self.size))
-            # YOUR_CODE_HERE
-            self.sy_target_n = None
-            baseline_loss = None
-            self.baseline_update_op = tf.train.AdamOptimizer(self.learning_rate).minimize(baseline_loss)
+            self.baseline_prediction = tf.squeeze(build_mlp(self.sy_ob_no, 
+                                                            1, 
+                                                            "nn_baseline",
+                                                            n_layers=self.n_layers,
+                                                            size=self.size,
+                                                            activation=tf.nn.relu)[-1])
+            self.sy_target_n = tf.placeholder(shape=[None], name="target", dtype=tf.float32)
+            self.baseline_loss = tf.losses.mean_squared_error(self.sy_target_n, self.baseline_prediction)
+            self.baseline_update_op = tf.train.AdamOptimizer(self.learning_rate).minimize(self.baseline_loss)
 
     def sample_trajectories(self, itr, env):
         # Collect paths until we have enough timesteps
@@ -318,19 +320,23 @@ class Agent(object):
             layers, params, ac = self.sess.run([self.layers, self.policy_parameters, self.sy_sampled_ac], feed_dict= { self.sy_ob_no : np.expand_dims(ob, 0) } )
             # ac = self.sy_sampled_ac.eval(feed_dict= { self.sy_ob_no : [ ob ] } )
             # ac = self.sy_sampled_ac.eval(feed_dict= { self.sy_ob_no : np.expand_dims(ob, 0) } )
-            # print('ac sampled shape :', np.shape(ac), ', ob shape :', np.shape(ob))
-            acs.append(ac)
+            ac_flatten = np.array(ac).flatten()
+            acs.append(ac_flatten)
+
+            # print('ac sampled shape :', np.shape(ac), ', ac flatten shape :', np.shape(ac_flatten), ', acs shape:', np.shape(acs), ', ob shape :', np.shape(ob))
             # print('action_space:', env.env.action_space)
+            # print('acs:', acs, ', ac_flatten:', ac_flatten)
             try :
-                ob, rew, done, _ = env.step(ac[0])
+                ob, rew, done, _ = env.step(int(ac_flatten[0]) if self.discrete else ac_flatten[0])
+                rewards.append(rew)
+                
+                # print('env.step(', (int(ac_flatten[0]) if self.discrete else ac_flatten[0]), ') = ', rew)
             except AssertionError as e :
-                print('assertion error:', e, ', ac:', ac, ', ac[0]:', ac[0], ', shape:', np.shape(ac),
+                print('assertion error:', e, ', ac:', ac, ', ac[0]:', ac_flatten, ', shape:', np.shape(ac),
                       ', obs:', obs, ', ob:', ob, ', type(ob):', type(ob), ', shape of sy_ob_no:', np.shape(np.expand_dims(ob, 0)),
                       ', params:', params, ', type(params):', type(params),
                       ', layers:', layers, ', self.layers:', self.layers)
                 raise e
-            
-            rewards.append(rew)
             steps += 1
             if done or steps > self.max_path_length:
                 break
@@ -466,8 +472,13 @@ class Agent(object):
             # Hint #bl1: rescale the output from the nn_baseline to match the statistics
             # (mean and std) of the current batch of Q-values. (Goes with Hint
             # #bl2 in Agent.update_parameters.
-            raise NotImplementedError
-            b_n = None # YOUR CODE HERE
+
+            # # q_n is not normalized but baseline prediction is trained toward normalized q_n
+            batch_avg = np.mean(q_n, axis=0) # average of current batch
+            batch_std = np.std(q_n, axis=0) + 1e-7
+            # descale to make b_n have same scale with q_n (the baseline prediction should have N(0, 1) scale)
+            b_n = mlp.descale_zscore(self.sess.run(self.baseline_prediction, feed_dict={self.sy_ob_no : np.array(ob_no, dtype=np.float32)}), batch_avg, batch_std)
+            
             adv_n = q_n - b_n
         else:
             adv_n = q_n.copy()
@@ -495,7 +506,7 @@ class Agent(object):
         q_n = self.sum_of_rewards(re_n)
         # print('after sum_of_rewards, q_n:', np.shape(q_n))
         adv_n = self.compute_advantage(ob_no, q_n)
-        # print('after compute_advantage, adv_n:', np.shape(adv_n))
+        # print('after compute_advantage, adv_n:', adv_n)
         #====================================================================================#
         #                           ----------PROBLEM 3----------
         # Advantage Normalization
@@ -504,7 +515,7 @@ class Agent(object):
             # On the next line, implement a trick which is known empirically to reduce variance
             # in policy gradient methods: normalize adv_n to have mean zero and std=1.
 
-            adv_n, _, _ = mlp.scale_zscore(adv_n, sigma=1.0)
+            adv_n, _, _ = mlp.scale_zscore(adv_n)
         return q_n, adv_n
 
     def update_parameters(self, ob_no, ac_na, q_n, adv_n):
@@ -540,10 +551,23 @@ class Agent(object):
             # targets to have mean zero and std=1. (Goes with Hint #bl1 in 
             # Agent.compute_advantage.)
 
-            # YOUR_CODE_HERE
-            raise NotImplementedError
-            target_n = None 
+            baseline_targets = [ self.baseline_prediction, self.baseline_loss, self.baseline_update_op ]
+            rescaled_q_n = np.array(mlp.scale_zscore(q_n, mu=0, sigma=1)[0])
+            baseline_feed_dict = {
+                self.sy_ob_no : np.array(ob_no, dtype=np.float32),
+                self.sy_target_n : rescaled_q_n
+            }
 
+            # print('rescaled_q_n:', rescaled_q_n, ', shape:', np.shape(rescaled_q_n))
+            # print('before baseline update, baseline_loss and adv_n :', self.sess.run([self.baseline_loss, adv_n], feed_dict=baseline_feed_dict))
+            bl_prediction, baseline_loss_before, _ = self.sess.run(baseline_targets, feed_dict=baseline_feed_dict)
+            baseline_loss_after = self.sess.run(self.baseline_loss, feed_dict=baseline_feed_dict) # sure to use updated adv_n
+            print('baseline loss:', baseline_loss_before, ' to ', baseline_loss_after, ', batch_avg:', np.mean(q_n, axis=0), ', batch_std:', np.std(q_n, axis=0))
+            # print('after baseline update, baseline_loss and adv_n :', self.sess.run([self.baseline_loss, adv_n], feed_dict=baseline_feed_dict))
+            # print('bl_prediction:', bl_prediction, ', loss:', baseline_loss,
+            #       ', sy_ob_no:', np.array(ob_no, dtype=np.float32),
+            #       ', sy_target_n:', rescaled_q_n,
+            #       ', evaled_adv_n:', evaled_adv_n)
         #====================================================================================#
         #                           ----------PROBLEM 3----------
         # Performing the Policy Update
@@ -557,14 +581,27 @@ class Agent(object):
 
         targets = [ self.sy_logprob_n, self.layers[-1], self.sy_adv_n, self.loss, self.update_op ]
         try :
-            ac_na_reshaped = np.array(ac_na, dtype=np.float32) if self.discrete else np.reshape(ac_na, (-1, self.ac_dim))
+            # if discrete, self.sy_ac_na shape is (batch_size) and else (batch_size, self.ac_dim)
+            # ac_na is always in one additional dimension so need to reduce.
+            # need to flatten (batch_size, 1) to (batch_size) in case of discrete.
+            ac_na_evaluated = np.reshape(ac_na, -1) if self.discrete else np.reshape(ac_na, (-1, self.ac_dim))
+            # if self.discrete :
+            #     if self.ac_dim != 1 :
+            #         np.argmax(ac_na, axis=-1)
+            #     else :
+            #         ac_na_evaluated = np.array(ac_na).flatten()
             feed_dict = {
                 self.sy_ob_no : np.array(ob_no, dtype=np.float32),
-                self.sy_ac_na : ac_na_reshaped,
+                self.sy_ac_na : ac_na_evaluated,
                 self.sy_adv_n : np.array(adv_n)
             }
+
+            print('discrete:', self.discrete, ', nn_baseline:', self.nn_baseline, ', normalize_advantages:', self.normalize_advantages, ', reward_to_go:', self.reward_to_go, ', ac_na shape:', np.shape(ac_na), ', evaluated ac_na shape:', np.shape(ac_na_evaluated))
             
+            print('before update, loss:', self.sess.run(self.loss, feed_dict=feed_dict))
             sy_logprob_n, sy_logits_na, sy_adv_n, loss,  _ = self.sess.run(targets, feed_dict=feed_dict)
+            print('loss:', loss)
+            print('after update, loss:', self.sess.run(self.loss, feed_dict=feed_dict))
             '''
             print('sy_logprob_n:', sy_logprob_n, ', sy_logits_na:', sy_logits_na, ', sy_adv_n:', sy_adv_n, ', loss:', loss,
                   ', ph ob_no:', np.array(ob_no, dtype=np.float32),
@@ -647,7 +684,7 @@ def train_PG(
     ob_dim = env.observation_space.shape[0]
     ac_dim = env.action_space.n if discrete else env.action_space.shape[0]
 
-    print('ob_dim :', ob_dim, ', ac_dim:', ac_dim)
+    print('ob_dim :', ob_dim, ', ac_dim:', ac_dim, ', discrete:', discrete)
 
     #========================================================================================#
     # Initialize Agent
@@ -704,8 +741,6 @@ def train_PG(
         # print('ac_na:', np.shape(ac_na))
         # print('re_n:', np.shape(re_n))
 
-        ac_na = np.array(ac_na).flatten()
-        
         q_n, adv_n = agent.estimate_return(ob_no, re_n)
         # print('q_n:', np.shape(q_n))
         # print('adv_n:', np.shape(adv_n))
