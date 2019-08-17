@@ -320,14 +320,16 @@ class Agent(object):
             layers, params, ac = self.sess.run([self.layers, self.policy_parameters, self.sy_sampled_ac], feed_dict= { self.sy_ob_no : np.expand_dims(ob, 0) } )
             # ac = self.sy_sampled_ac.eval(feed_dict= { self.sy_ob_no : [ ob ] } )
             # ac = self.sy_sampled_ac.eval(feed_dict= { self.sy_ob_no : np.expand_dims(ob, 0) } )
-            ac_flatten = np.array(ac).flatten()
-            acs.append(ac_flatten)
+            # ac_flatten = np.array(ac).flatten()
+            # acs.append(ac_flatten)
+            ac = ac[0]
+            acs.append(ac)
 
             # print('ac sampled shape :', np.shape(ac), ', ac flatten shape :', np.shape(ac_flatten), ', acs shape:', np.shape(acs), ', ob shape :', np.shape(ob))
             # print('action_space:', env.env.action_space)
             # print('acs:', acs, ', ac_flatten:', ac_flatten)
             try :
-                ob, rew, done, _ = env.step(int(ac_flatten[0]) if self.discrete else ac_flatten[0])
+                ob, rew, done, _ = env.step(ac)
                 rewards.append(rew)
                 
                 # print('env.step(', (int(ac_flatten[0]) if self.discrete else ac_flatten[0]), ') = ', rew)
@@ -552,13 +554,13 @@ class Agent(object):
             # Agent.compute_advantage.)
 
             baseline_targets = [ self.baseline_prediction, self.baseline_loss, self.baseline_update_op ]
-            rescaled_q_n = np.array(mlp.scale_zscore(q_n, mu=0, sigma=1)[0])
+            target_n = np.array(mlp.scale_zscore(q_n, mu=0, sigma=1)[0])
             baseline_feed_dict = {
                 self.sy_ob_no : np.array(ob_no, dtype=np.float32),
-                self.sy_target_n : rescaled_q_n
+                self.sy_target_n : target_n
             }
 
-            # print('rescaled_q_n:', rescaled_q_n, ', shape:', np.shape(rescaled_q_n))
+            # print('target_n:', target_n, ', shape:', np.shape(target_n))
             # print('before baseline update, baseline_loss and adv_n :', self.sess.run([self.baseline_loss, adv_n], feed_dict=baseline_feed_dict))
             bl_prediction, baseline_loss_before, _ = self.sess.run(baseline_targets, feed_dict=baseline_feed_dict)
             baseline_loss_after = self.sess.run(self.baseline_loss, feed_dict=baseline_feed_dict) # sure to use updated adv_n
@@ -566,7 +568,7 @@ class Agent(object):
             # print('after baseline update, baseline_loss and adv_n :', self.sess.run([self.baseline_loss, adv_n], feed_dict=baseline_feed_dict))
             # print('bl_prediction:', bl_prediction, ', loss:', baseline_loss,
             #       ', sy_ob_no:', np.array(ob_no, dtype=np.float32),
-            #       ', sy_target_n:', rescaled_q_n,
+            #       ', sy_target_n:', target_n,
             #       ', evaled_adv_n:', evaled_adv_n)
         #====================================================================================#
         #                           ----------PROBLEM 3----------
