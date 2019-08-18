@@ -477,9 +477,11 @@ class Agent(object):
             batch_avg = np.mean(q_n, axis=0) # average of current batch
             batch_std = np.std(q_n, axis=0) + 1e-7
             # descale to make b_n have same scale with q_n (the baseline prediction should have N(0, 1) scale)
-            b_n = mlp.descale_zscore(self.sess.run(self.baseline_prediction, feed_dict={self.sy_ob_no : np.array(ob_no, dtype=np.float32)}), batch_avg, batch_std)
+            bl_prediction = self.sess.run(self.baseline_prediction, feed_dict={self.sy_ob_no : np.array(ob_no, dtype=np.float32)})
+            b_n = mlp.descale_zscore(bl_prediction, batch_avg, batch_std, mu=np.mean(bl_prediction, axis=0), sigma=np.std(bl_prediction, axis=0)) # i thought that mu, sigma can be safely assumed to be 0, 1 respectively, but the learning needs more variance reduction
             
             adv_n = q_n - b_n
+            print('adv_n:', adv_n, ', q_n:', np.array(q_n), ', b_n:', b_n)
         else:
             adv_n = q_n.copy()
         return adv_n
