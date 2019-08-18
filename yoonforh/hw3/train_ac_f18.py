@@ -94,7 +94,7 @@ class Agent(object):
         raise NotImplementedError
         sy_ob_no = tf.placeholder(shape=[None, self.ob_dim], name="ob", dtype=tf.float32)
         if self.discrete:
-            sy_ac_na = tf.placeholder(shape=[None], name="ac", dtype=tf.int32) 
+            sy_ac_na = tf.placeholder(shape=[None], name="ac", dtype=tf.int64) 
         else:
             sy_ac_na = tf.placeholder(shape=[None, self.ac_dim], name="ac", dtype=tf.float32) 
         # YOUR HW2 CODE HERE
