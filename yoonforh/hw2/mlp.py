@@ -71,15 +71,15 @@ def descale_signed(data, minv, maxv): # value 0 is preserved even after rescale
     
     return data * (maxv + 1e-7)
 
-def scale_zscore(data, mu=0, sigma=1):
+def scale_zscore(data, mu=0, sigma=1): # make N(avg, std) -> N(mu, sigma)
     avg = np.mean(data, 0)
     std = np.std(data, 0)
 
     # noise term prevents the zero division
     return (data - avg) / (std + 1e-7) * sigma + mu, avg, std
 
-def descale_zscore(data, avg, std, mu=0, sigma=1):
-    return (data - mu) * (std + 1e-7) / sigma + avg
+def descale_zscore(data, avg, std, mu=0, sigma=1): # make N(mu, sigma) -> N(avg, std)
+    return (data - mu) / (sigma + 1e-7) * std + avg
 
 def check_nan(x) :
     return (x is np.nan or x != x)
