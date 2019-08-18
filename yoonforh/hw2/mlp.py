@@ -76,10 +76,10 @@ def scale_zscore(data, mu=0, sigma=1):
     std = np.std(data, 0)
 
     # noise term prevents the zero division
-    return (data - avg + mu) / (std + 1e-7) * sigma, avg, std
+    return (data - avg) / (std + 1e-7) * sigma + mu, avg, std
 
 def descale_zscore(data, avg, std, mu=0, sigma=1):
-    return data * (std + 1e-7) / sigma + avg - mu
+    return (data - mu) * (std + 1e-7) / sigma + avg
 
 def check_nan(x) :
     return (x is np.nan or x != x)
