@@ -40,7 +40,7 @@ def build_mlp(input_placeholder, output_size, scope, n_layers, size, activation=
         Hint: use tf.layers.dense    
     """
     return mlp.build_hypothesis(input_placeholder, output_size, scope, n_layers, size,
-                                activation=activation, output_activation=output_activation)
+                                activation=activation, output_activation=output_activation)[-1]
 
 def pathlength(path):
     return len(path["reward"])
@@ -98,7 +98,7 @@ class Agent(object):
         """
         sy_ob_no = tf.placeholder(shape=[None, self.ob_dim], name="ob", dtype=tf.float32)
         if self.discrete:
-            sy_ac_na = tf.placeholder(shape=[None], name="ac", dtype=tf.int32) 
+            sy_ac_na = tf.placeholder(shape=[None], name="ac", dtype=tf.int64) # lunar_lander requires actions as int64 
         else:
             sy_ac_na = tf.placeholder(shape=[None, self.ac_dim], name="ac", dtype=tf.float32) 
         sy_adv_n = tf.placeholder(shape=[None], name="adv", dtype=tf.float32) # it's r(tau)
@@ -133,8 +133,7 @@ class Agent(object):
                 Pass in self.n_layers for the 'n_layers' argument, and
                 pass in self.size for the 'size' argument.
         """
-        self.layers = build_mlp(sy_ob_no, self.ac_dim, 'mlp', self.n_layers, self.size, activation=tf.tanh)
-        ac_hypothesis = self.layers[-1]
+        ac_hypothesis = build_mlp(sy_ob_no, self.ac_dim, 'mlp', self.n_layers, self.size, activation=tf.tanh)
         
         if self.discrete:
             # print('ac_hypothesis:', ac_hypothesis)
@@ -181,7 +180,7 @@ class Agent(object):
             # dist = tfp.distributions.Categorical(probs=action_dist)
             # dist = tfp.distributions.Categorical(logits=tf.reshape(sy_logits_na, [-1])) # reshape to flatten
             dist = tfp.distributions.Categorical(logits=sy_logits_na)
-            sy_sampled_ac = dist.sample()
+            sy_sampled_ac = tf.cast(dist.sample(), dtype=tf.int64)
             '''
             sy_sampled_ac = tf.random.multinomial(logits=sy_logits_na, num_samples=1)
             '''
@@ -285,8 +284,7 @@ class Agent(object):
                                                             1, 
                                                             "nn_baseline",
                                                             n_layers=self.n_layers,
-                                                            size=self.size,
-                                                            activation=tf.nn.relu)[-1])
+                                                            size=self.size))
             self.sy_target_n = tf.placeholder(shape=[None], name="target", dtype=tf.float32)
             self.baseline_loss = tf.losses.mean_squared_error(self.sy_target_n, self.baseline_prediction)
             self.baseline_update_op = tf.train.AdamOptimizer(self.learning_rate).minimize(self.baseline_loss)
@@ -317,7 +315,7 @@ class Agent(object):
             #                           ----------PROBLEM 3----------
             #====================================================================================#
             # print('ob:', ob, ',obs:', obs)
-            layers, params, ac = self.sess.run([self.layers, self.policy_parameters, self.sy_sampled_ac], feed_dict= { self.sy_ob_no : np.expand_dims(ob, 0) } )
+            params, ac = self.sess.run([self.policy_parameters, self.sy_sampled_ac], feed_dict= { self.sy_ob_no : np.expand_dims(ob, 0) } )
             # ac = self.sy_sampled_ac.eval(feed_dict= { self.sy_ob_no : [ ob ] } )
             # ac = self.sy_sampled_ac.eval(feed_dict= { self.sy_ob_no : np.expand_dims(ob, 0) } )
             # ac_flatten = np.array(ac).flatten()
@@ -328,17 +326,17 @@ class Agent(object):
             # print('ac sampled shape :', np.shape(ac), ', ac flatten shape :', np.shape(ac_flatten), ', acs shape:', np.shape(acs), ', ob shape :', np.shape(ob))
             # print('action_space:', env.env.action_space)
             # print('acs:', acs, ', ac_flatten:', ac_flatten)
-            try :
-                ob, rew, done, _ = env.step(ac)
-                rewards.append(rew)
+            # try :
+            ob, rew, done, _ = env.step(ac)
+            rewards.append(rew)
                 
-                # print('env.step(', (int(ac_flatten[0]) if self.discrete else ac_flatten[0]), ') = ', rew)
-            except AssertionError as e :
-                print('assertion error:', e, ', ac:', ac, ', ac[0]:', ac_flatten, ', shape:', np.shape(ac),
-                      ', obs:', obs, ', ob:', ob, ', type(ob):', type(ob), ', shape of sy_ob_no:', np.shape(np.expand_dims(ob, 0)),
-                      ', params:', params, ', type(params):', type(params),
-                      ', layers:', layers, ', self.layers:', self.layers)
-                raise e
+            # print('env.step(', ac, ') = ', rew, ', new ob:', ob)
+            # except AssertionError as e :
+            #     print('assertion error:', e, ', ac:', ac, ', ac[0]:', ac_flatten, ', shape:', np.shape(ac),
+            #           ', obs:', obs, ', ob:', ob, ', type(ob):', type(ob), ', shape of sy_ob_no:', np.shape(np.expand_dims(ob, 0)),
+            #           ', params:', params, ', type(params):', type(params),
+            #           ', layers:', layers)
+            #     raise e
             steps += 1
             if done or steps > self.max_path_length:
                 break
@@ -581,7 +579,7 @@ class Agent(object):
         # For debug purposes, you may wish to save the value of the loss function before
         # and after an update, and then log them below. 
 
-        targets = [ self.sy_logprob_n, self.layers[-1], self.sy_adv_n, self.loss, self.update_op ]
+        targets = [ self.sy_logprob_n, self.sy_adv_n, self.loss, self.update_op ]
         try :
             # if discrete, self.sy_ac_na shape is (batch_size) and else (batch_size, self.ac_dim)
             # ac_na is always in one additional dimension so need to reduce.
@@ -601,11 +599,11 @@ class Agent(object):
             print('discrete:', self.discrete, ', nn_baseline:', self.nn_baseline, ', normalize_advantages:', self.normalize_advantages, ', reward_to_go:', self.reward_to_go, ', ac_na shape:', np.shape(ac_na), ', evaluated ac_na shape:', np.shape(ac_na_evaluated))
             
             print('before update, loss:', self.sess.run(self.loss, feed_dict=feed_dict))
-            sy_logprob_n, sy_logits_na, sy_adv_n, loss,  _ = self.sess.run(targets, feed_dict=feed_dict)
+            sy_logprob_n, sy_adv_n, loss,  _ = self.sess.run(targets, feed_dict=feed_dict)
             print('loss:', loss)
             print('after update, loss:', self.sess.run(self.loss, feed_dict=feed_dict))
             '''
-            print('sy_logprob_n:', sy_logprob_n, ', sy_logits_na:', sy_logits_na, ', sy_adv_n:', sy_adv_n, ', loss:', loss,
+            print('sy_logprob_n:', sy_logprob_n, ', sy_adv_n:', sy_adv_n, ', loss:', loss,
                   ', ph ob_no:', np.array(ob_no, dtype=np.float32),
                   ', ph ac_na:', np.array(ac_na, dtype=np.float32),
                   ', ph adv_n:', np.array(adv_n),
