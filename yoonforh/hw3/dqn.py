@@ -166,7 +166,7 @@ class QLearner(object):
     self.q_network = q_func(obs_t_float, self.num_actions, 'q_network', False) # q_func returns the q values of each actions. so only discrete actions are applicable
     # next q network = target network.
     self.target_q_network = q_func(obs_tp1_float, self.num_actions, 'target_q_network', False) # next_q will be the greedy q expectations of s', a' and 
-    self.total_error = dqn_utils.huber_loss(self.rew_t_ph + tf.where(self.done_mask_ph == 1, 0.0 * self.target_q_network, gamma * self.target_q_network) - self.q_network)
+    self.total_error = huber_loss(self.rew_t_ph + tf.where(self.done_mask_ph == 1, 0.0 * self.target_q_network, gamma * self.target_q_network) - self.q_network)
 
     q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='q_network')
     target_q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='target_q_network')
@@ -300,7 +300,7 @@ class QLearner(object):
       obs_t_batch, act_t_batch, rew_t_batch, obs_tp1_batch, done_mask = self.replay_buffer.sample(self.batch_size)
 
       if not self.model_initialized :
-        dqn_utils.initialize_interdependent_variables(self.session, tf.global_variables(), {
+        initialize_interdependent_variables(self.session, tf.global_variables(), {
           self.obs_t_ph: obs_t_batch,
           self.obs_tp1_ph: obs_tp1_batch,
         })
