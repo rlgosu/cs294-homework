@@ -14,6 +14,11 @@ import mlp
 
 OptimizerSpec = namedtuple("OptimizerSpec", ["constructor", "kwargs", "lr_schedule"])
 
+# see this for windows support on Atari. https://github.com/openai/gym/issues/11
+# I did this one.  (choco install ffmpeg was of no use)
+#  => conda install -c conda-forge ffmpeg
+#  
+
 class QLearner(object):
 
   def __init__(
@@ -243,10 +248,10 @@ class QLearner(object):
     next_idx = self.replay_buffer.store_frame(ob)
     encoded = self.replay_buffer.encode_recent_observation()
 
-    if exploration.value(self.t) >= 1.0 : # we need to explore
+    if self.exploration.value(self.t) >= 1.0 : # we need to explore
       action = np.random.randint(0, self.num_actions)
     else :
-      action = np.argmax(self.session.run(self.q_network, feed_dict= { self.obs_t_ph : encoded }))
+      action = np.argmax(self.session.run(self.q_network, feed_dict= { self.obs_t_ph : np.expand_dims(encoded, 0) }))
     new_ob, reward, done, _ = self.env.step(action)
     if done :
       new_ob = env.reset()
