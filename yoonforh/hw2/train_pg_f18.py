@@ -179,11 +179,12 @@ class Agent(object):
             # action_dist = tf.nn.softmax(sy_logits_na) # softmax distribution of actions
             # dist = tfp.distributions.Categorical(probs=action_dist)
             # dist = tfp.distributions.Categorical(logits=tf.reshape(sy_logits_na, [-1])) # reshape to flatten
+            '''
             dist = tfp.distributions.Categorical(logits=sy_logits_na)
             sy_sampled_ac = tf.cast(dist.sample(), dtype=tf.int64)
             '''
-            sy_sampled_ac = tf.random.multinomial(logits=sy_logits_na, num_samples=1)
-            '''
+            sy_sampled_ac = tf.random.multinomial(logits=sy_logits_na, num_samples=1) # why the result shape is different betwen multinomial and categorical.sample?
+            sy_sampled_ac = tf.squeeze(sy_sampled_ac, axis=[-1])
             print('sy_sampled_ac shape:', np.shape(sy_sampled_ac))
         else:
             sy_mean, sy_logstd = policy_parameters
@@ -433,8 +434,9 @@ class Agent(object):
                     sub_q[t] = next_sum + re[t]
                     next_sum = sub_q[t] * self.gamma
 
-                for q_t in sub_q :
-                    q_n.append(q_t)
+                # for q_t in sub_q :
+                #     q_n.append(q_t)
+                q_n.extend(sub_q)
             else:
                 gamma = 1.0
                 total = 0.0
@@ -442,13 +444,14 @@ class Agent(object):
                     total += gamma * re[t]
                     gamma *= self.gamma
 
-                for _ in range(len(re)) :
-                    q_n.append(total)
+                # for _ in range(len(re)) :
+                #     q_n.append(total)
+                q_n.extend(np.ones(shape=[len(re)]) * total)
 
         # print('sum of path lengths :', np.shape(q_n))
         return q_n
 
-    def compute_advantage(self, ob_no, q_n):
+    def compute_advantage(self, ob_no, q_n, re_n):
         """
             Computes advantages by (possibly) subtracting a baseline from the estimated Q values
 
@@ -484,9 +487,36 @@ class Agent(object):
             # descale to make b_n have same scale with q_n (the baseline prediction should have N(0, 1) scale)
             bl_prediction = self.sess.run(self.baseline_prediction, feed_dict={self.sy_ob_no : np.array(ob_no, dtype=np.float32)})
             b_n = mlp.descale_zscore(bl_prediction, batch_avg, batch_std, mu=np.mean(bl_prediction, axis=0), sigma=np.std(bl_prediction, axis=0)) # i thought that mu, sigma can be safely assumed to be 0, 1 respectively, but the learning needs more variance reduction
+
+            # below are lambda-GAE logic. https://arxiv.org/pdf/1506.02438.pdf
+            # if _lambda is 1.0 then above GAE code does exactly same with this single statement : adv_n = q_n - b_n
+            lambda_ = 0.9
+            adv_n = []
+            for re in re_n :
+                b_base = len(adv_n)
+                sub_adv = np.empty(len(re))
+                
+                next_sum = 0.0
+                next_b = 0.0
+
+                for t in reversed(range(len(re))) :
+                    # adv(t) := re(t) - b(t) + [adv(t+1) * lambda * gamma + b(t+1) * gamma]
+                    # where adv(t+1) + b(t+1) would be Q(t+1)
+                    # so lambda works only on adv part (not on baseline part)
+                    sub_adv[t] = lambda_ * next_sum + re[t] + next_b - b_n[b_base + t]
+                    next_sum = sub_adv[t] * self.gamma
+                    next_b = b_n[b_base + t] * self.gamma
+                    
+                if not self.reward_to_go:
+                    sub_adv = np.ones(shape=[len(re)]) * sub_adv[0]
+
+                adv_n.extend(sub_adv)
             
+            adv_n_orig = q_n - b_n
+            print('adv_n:', np.array(adv_n), 'adv_n_orig:', adv_n_orig, ', q_n:', np.array(q_n), ', b_n:', b_n)
+            '''
             adv_n = q_n - b_n
-            print('adv_n:', adv_n, ', q_n:', np.array(q_n), ', b_n:', b_n)
+            '''
         else:
             adv_n = q_n.copy()
         return adv_n
@@ -512,7 +542,7 @@ class Agent(object):
         """
         q_n = self.sum_of_rewards(re_n)
         # print('after sum_of_rewards, q_n:', np.shape(q_n))
-        adv_n = self.compute_advantage(ob_no, q_n)
+        adv_n = self.compute_advantage(ob_no, q_n, re_n)
         # print('after compute_advantage, adv_n:', adv_n)
         #====================================================================================#
         #                           ----------PROBLEM 3----------
