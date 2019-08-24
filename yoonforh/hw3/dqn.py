@@ -244,6 +244,9 @@ class QLearner(object):
 
     #####
     # YOUR CODE HERE
+    if not self.model_initialized :
+      return
+    
     ob = self.last_obs
     next_idx = self.replay_buffer.store_frame(ob)
     encoded = self.replay_buffer.encode_recent_observation()
