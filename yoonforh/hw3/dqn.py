@@ -159,6 +159,8 @@ class QLearner(object):
     ######
 
     # YOUR CODE HERE
+    # Bellman error : the expectation of the advantage w.r.t. the action a
+    
 
     ######
 

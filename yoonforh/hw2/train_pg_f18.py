@@ -228,6 +228,11 @@ class Agent(object):
             # dist = tfp.distributions.Normal(loc=sy_mean, scale=tf.exp(sy_logstd)) # in case ac_dim is not 1
             dist = tfp.distributions.MultivariateNormalDiag(loc=sy_mean, scale_diag=tf.exp(sy_logstd))
             sy_logprob_n = dist.log_prob(sy_ac_na)
+
+            # without using distribution, use gaussian pdf
+            # sy_std = tf.exp(sy_logstd)
+            # sy_z = (sy_ac_na - sy_mean)/sy_std
+            # sy_logprob_n = - 0.5 * tf.reduce_sum(tf.square(sy_z), axis = 1)
         return sy_logprob_n
 
     def build_computation_graph(self):
