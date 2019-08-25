@@ -171,7 +171,7 @@ class QLearner(object):
     self.q_network = q_func(obs_t_float, self.num_actions, 'q_network', False) # q_func returns the q values of each actions. so only discrete actions are applicable
     # next q network = target network.
     self.target_q_network = q_func(obs_tp1_float, self.num_actions, 'target_q_network', False) # next_q will be the greedy q expectations of s', a' and 
-    self.total_error = huber_loss(self.rew_t_ph + tf.where(self.done_mask_ph == 1, 0.0 * self.target_q_network, gamma * self.target_q_network) - self.q_network)
+    self.total_error = huber_loss(self.rew_t_ph + tf.math.reduce_max(tf.where(self.done_mask_ph == 1, 0.0 * self.target_q_network, gamma * self.target_q_network), axis=-1) - tf.math.reduce_max(self.q_network, axis=-1))
 
     q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='q_network')
     target_q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='target_q_network')
@@ -244,24 +244,23 @@ class QLearner(object):
 
     #####
     # YOUR CODE HERE
-    if not self.model_initialized :
-      return
-    
     ob = self.last_obs
     next_idx = self.replay_buffer.store_frame(ob)
     encoded = self.replay_buffer.encode_recent_observation()
 
-    if self.exploration.value(self.t) >= 1.0 : # we need to explore
+    if not self.model_initialized or self.exploration.value(self.t) >= 1.0 : # we need to explore
       action = np.random.randint(0, self.num_actions)
     else :
       action = np.argmax(self.session.run(self.q_network, feed_dict= { self.obs_t_ph : np.expand_dims(encoded, 0) }))
     new_ob, reward, done, _ = self.env.step(action)
     if done :
-      new_ob = env.reset()
+      new_ob = self.env.reset()
     self.replay_buffer.store_effect(next_idx, action, reward, done)
     self.last_obs = new_ob
 
   def update_model(self):
+    # print('update_model(t:', self.t, ', learning_starts:', self.learning_starts, ', learning_freq:', self.learning_freq,
+    #       ', batch_size:', self.batch_size, ', can sample:', self.replay_buffer.can_sample(self.batch_size),')')
     ### 3. Perform experience replay and train the network.
     # note that this is only done if the replay buffer contains enough samples
     # for us to learn something useful -- until then, the model will not be
@@ -321,7 +320,7 @@ class QLearner(object):
         self.rew_t_ph : rew_t_batch,
         self.obs_tp1_ph : obs_tp1_batch,
         self.done_mask_ph : done_mask,
-        self.learning_rate : self.optimizer_spec.lr_schedule.value(t),
+        self.learning_rate : self.optimizer_spec.lr_schedule.value(self.t),
         })
 
       self.num_param_updates += 1
@@ -331,6 +330,7 @@ class QLearner(object):
     self.t += 1
 
   def log_progress(self):
+    # print("Timestep %d" % (self.t,),  self.model_initialized)
     episode_rewards = get_wrapper_by_name(self.env, "Monitor").get_episode_rewards()
 
     if len(episode_rewards) > 0:
