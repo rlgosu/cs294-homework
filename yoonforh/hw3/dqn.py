@@ -170,10 +170,15 @@ class QLearner(object):
     # current q network = behavior network.
     self.q_network = q_func(obs_t_float, self.num_actions, 'q_network', False) # q_func returns the q values of each actions. so only discrete actions are applicable
     # next q network = target network.
-    self.target_q_network = q_func(obs_tp1_float, self.num_actions, 'target_q_network', False) # next_q will be the greedy q expectations of s', a' and
-    q_tp1 = self.rew_t_ph + tf.math.reduce_max(tf.where(self.done_mask_ph == 1, 0.0, gamma) * self.target_q_network, axis=-1) # r + gamma * Q^*(s', a')
-    q_t = tf.gather(self.q_network, self.act_t_ph, axis=1, batch_dims=1) # q network value is of the self.act_t_ph
-    self.total_error = huber_loss(q_tp1 - q_t)
+
+    # next_q will be the greedy q expectations of s', a' and
+    self.target_q_network = q_func(obs_tp1_float, self.num_actions, 'target_q_network', False)
+
+    # r + gamma * Q^*(s', a')
+    self.q_tp1 = self.rew_t_ph + tf.math.reduce_max(tf.where(self.done_mask_ph == 1.0, 0.0, gamma) * self.target_q_network, axis=-1)
+    # q network value is expected return of the s, self.act_t_ph
+    self.q_t = tf.squeeze(tf.gather(self.q_network, tf.expand_dims(self.act_t_ph, -1), axis=-1, batch_dims=-1), axis=[-1])
+    self.total_error = huber_loss(self.q_tp1 - self.q_t)
 
     q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='q_network')
     target_q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='target_q_network')
@@ -250,7 +255,7 @@ class QLearner(object):
     next_idx = self.replay_buffer.store_frame(ob) # returns old idx
     encoded = self.replay_buffer.encode_recent_observation()
 
-    if not self.model_initialized or self.exploration.value(self.t) >= 1.0 : # we need to explore
+    if not self.model_initialized or np.random.rand() <= .1 : # we need to explore by 10 percent
       action = np.random.randint(0, self.num_actions)
     else :
       action = np.argmax(self.session.run(self.q_network, feed_dict= { self.obs_t_ph : np.expand_dims(encoded, 0) }))
@@ -316,7 +321,7 @@ class QLearner(object):
         self.session.run(self.update_target_fn)
         self.model_initialized = True
 
-      self.session.run(self.train_fn, feed_dict = {
+      q_tp1, q_t, total_error, _ = self.session.run([self.q_tp1, self.q_t, self.total_error, self.train_fn], feed_dict = {
         self.obs_t_ph : obs_t_batch,
         self.act_t_ph : act_t_batch,
         self.rew_t_ph : rew_t_batch,
@@ -327,7 +332,8 @@ class QLearner(object):
 
       self.num_param_updates += 1
       if self.num_param_updates % self.target_update_freq == 0 :
-        self.session.run(self.update_target_fn)        
+        self.session.run(self.update_target_fn)
+        # print('q_tp1:', np.array(q_tp1), ', q_t:', np.array(q_t), ', total_error:', np.array(total_error), ', t:', self.t)
 
     self.t += 1
 
