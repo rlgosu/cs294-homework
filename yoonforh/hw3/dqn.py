@@ -255,7 +255,7 @@ class QLearner(object):
     next_idx = self.replay_buffer.store_frame(ob) # returns old idx
     encoded = self.replay_buffer.encode_recent_observation()
 
-    if not self.model_initialized or np.random.rand() <= .1 : # we need to explore by 10 percent
+    if not self.model_initialized or np.random.rand() <= self.exploration.value(self.t) : # we need to explore by 10 percent
       action = np.random.randint(0, self.num_actions)
     else :
       action = np.argmax(self.session.run(self.q_network, feed_dict= { self.obs_t_ph : np.expand_dims(encoded, 0) }))
