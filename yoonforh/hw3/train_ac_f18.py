@@ -92,7 +92,6 @@ class Agent(object):
                 sy_ac_na: placeholder for actions
                 sy_adv_n: placeholder for advantages
         """
-        raise NotImplementedError
         sy_ob_no = tf.placeholder(shape=[None, self.ob_dim], name="ob", dtype=tf.float32)
         if self.discrete:
             sy_ac_na = tf.placeholder(shape=[None], name="ac", dtype=tf.int64) 
@@ -293,17 +292,17 @@ class Agent(object):
             ob, rew, done, _ = env.step(ac)
             # add the observation after taking a step to next_obs
             # YOUR CODE HERE
-            raise NotImplementedError
+            next_obs.append(ob)
             rewards.append(rew)
             steps += 1
             # If the episode ended, the corresponding terminal value is 1
             # otherwise, it is 0
             # YOUR CODE HERE
             if done or steps > self.max_path_length:
-                raise NotImplementedError
+                terminals.append(1)
                 break
             else:
-                raise NotImplementedError
+                terminals.append(0)
         path = {"observation" : np.array(obs, dtype=np.float32), 
                 "reward" : np.array(rewards, dtype=np.float32), 
                 "action" : np.array(acs, dtype=np.float32),
@@ -337,9 +336,13 @@ class Agent(object):
         # Note: don't forget to use terminal_n to cut off the V(s') term when computing Q(s, a)
         # otherwise the values will grow without bound.
         # YOUR CODE HERE
-        raise NotImplementedError
-        adv_n = None
+        v_t = self.sess.run(self.critic_prediction, feed_dict={self.sy_ob_no : np.array(ob_no, dtype=np.float32)})
+        v_tp1 = self.sess.run(self.critic_prediction, feed_dict={self.sy_ob_no : np.array(next_ob_no, dtype=np.float32)})
 
+        adv_n = re_n + self.gamma * v_tp1 - v_t
+
+        print('adv_n:', np.array(adv_n), 're_n:', np.array(re_n), ', v_tp1:', np.array(v_tp1), ', v_t:', np.array(v_t))
+        
         if self.normalize_advantages:
             adv_n, _, _ = mlp.scale_zscore(adv_n)
         return adv_n
@@ -371,7 +374,26 @@ class Agent(object):
         # Note: don't forget to use terminal_n to cut off the V(s') term when computing the target
         # otherwise the values will grow without bound.
         # YOUR CODE HERE
-        raise NotImplementedError
+        critic_targets = [ self.critic_prediction, self.critic_loss, self.critic_update_op ]
+
+        print('step length:', len(re_n), ', grad steps per target update:', self.num_grad_steps_per_target_update,
+              ', target update counts:', self.num_target_updates)
+
+        for u in range(self.num_target_updates) : # number of target refresh
+            next_v_prediction = self.sess.run(self.critic_prediction, feed_dict={self.sy_ob_no : np.array(next_ob_no, dtype=np.float32)})
+
+            target_n = [ re_n[t] + 0.0 if terminal_n[t] == 1.0 else self.gamma * next_v_prediction[t] for t in range(len(re_n)) ]
+
+            critic_feed_dict = {
+                self.sy_ob_no : np.array(ob_no, dtype=np.float32),
+                self.sy_target_n : target_n
+            }
+
+            for s in range(self.num_grad_steps_per_target_update) : # number of grads per given target estimation
+                critic_prediction, critic_loss_before, _ = self.sess.run(critic_targets, feed_dict=critic_feed_dict)
+                critic_loss_after = self.sess.run(self.critic_loss, feed_dict=critic_feed_dict)
+                print('[', s, '] critic loss:', critic_loss_before, ' to ', critic_loss_after,
+                      ', batch_avg:', np.mean(target_n, axis=0), ', batch_std:', np.std(target_n, axis=0))
 
     def update_actor(self, ob_no, ac_na, adv_n):
         """ 
@@ -493,7 +515,9 @@ def train_AC(
         # (2) use the updated critic to compute the advantage by, calling agent.estimate_advantage
         # (3) use the estimated advantage values to update the actor, by calling agent.update_actor
         # YOUR CODE HERE
-        raise NotImplementedError
+        agent.update_critic(ob_no, next_ob_no, re_n, terminal_n)
+        adv_n = agent.estimate_advantage(ob_no, next_ob_no, re_n, terminal_n)
+        agent.update_actor(ob_no, ac_na, adv_n)
 
         # Log diagnostics
         returns = [path["reward"].sum() for path in paths]
