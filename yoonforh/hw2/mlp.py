@@ -118,12 +118,12 @@ def build_hypothesis(input_placeholder, output_size, scope_name, n_layers, size,
             neuron = neurons[i]
 
             layer = tf.layers.dense(layer, neuron,
-                                    kernel_initializer = tf.contrib.layers.xavier_initializer(seed=default_random_seed),
+                                    kernel_initializer = tf.contrib.layers.xavier_initializer(), # don't fix seed
                                     activation=activation,
                                     name = 'layer-' + str(i))
             layers.append(layer)
         layer = tf.layers.dense(layer, output_size,
-                                kernel_initializer = tf.contrib.layers.xavier_initializer(seed=default_random_seed),
+                                kernel_initializer = tf.contrib.layers.xavier_initializer(), # don't fix seed
                                 activation=output_activation,
                                 name = 'layer-last')
         layers.append(layer)

@@ -75,6 +75,7 @@ class Agent(object):
         self.reward_to_go = estimate_return_args['reward_to_go']
         self.nn_baseline = estimate_return_args['nn_baseline']
         self.normalize_advantages = estimate_return_args['normalize_advantages']
+        self.GAE = estimate_return_args['gae']
 
     def init_tf_sess(self):
         tf_config = tf.ConfigProto(inter_op_parallelism_threads=1, intra_op_parallelism_threads=1) 
@@ -229,11 +230,6 @@ class Agent(object):
             # dist = tfp.distributions.Normal(loc=sy_mean, scale=tf.exp(sy_logstd)) # in case ac_dim is not 1
             dist = tfp.distributions.MultivariateNormalDiag(loc=sy_mean, scale_diag=tf.exp(sy_logstd))
             sy_logprob_n = dist.log_prob(sy_ac_na)
-
-            # without using distribution, use gaussian pdf
-            # sy_std = tf.exp(sy_logstd)
-            # sy_z = (sy_ac_na - sy_mean)/sy_std
-            # sy_logprob_n = - 0.5 * tf.reduce_sum(tf.square(sy_z), axis = 1)
         return sy_logprob_n
 
     def build_computation_graph(self):
@@ -427,12 +423,14 @@ class Agent(object):
 
         for re in re_n : 
             if self.reward_to_go:
-                next_sum = 0.0
-
                 sub_q = np.empty(len(re))
-                for t in reversed(range(len(re))) :
-                    sub_q[t] = next_sum + re[t]
-                    next_sum = sub_q[t] * self.gamma
+                for t in range(len(re)) :
+                    sub_q[t] = 0.0
+                    gamma = 1.0
+
+                    for u in range(len(re) - t) :
+                        sub_q[t] += gamma * re[t + u]
+                        gamma *= self.gamma
 
                 # for q_t in sub_q :
                 #     q_n.append(q_t)
@@ -486,37 +484,36 @@ class Agent(object):
             batch_std = np.std(q_n, axis=0) + 1e-7
             # descale to make b_n have same scale with q_n (the baseline prediction should have N(0, 1) scale)
             bl_prediction = self.sess.run(self.baseline_prediction, feed_dict={self.sy_ob_no : np.array(ob_no, dtype=np.float32)})
-            b_n = mlp.descale_zscore(bl_prediction, batch_avg, batch_std, mu=np.mean(bl_prediction, axis=0), sigma=np.std(bl_prediction, axis=0)) # i thought that mu, sigma can be safely assumed to be 0, 1 respectively, but the learning needs more variance reduction
+            b_n = mlp.descale_zscore(bl_prediction, batch_avg, batch_std) # , mu=np.mean(bl_prediction, axis=0), sigma=np.std(bl_prediction, axis=0)) # i thought that mu, sigma can be safely assumed to be 0, 1 respectively, but the learning needs more variance reduction
 
-            # below are lambda-GAE logic. https://arxiv.org/pdf/1506.02438.pdf
-            # if _lambda is 1.0 then above GAE code does exactly same with this single statement : adv_n = q_n - b_n
-            lambda_ = 0.9
-            adv_n = []
-            for re in re_n :
-                b_base = len(adv_n)
-                sub_adv = np.empty(len(re))
-                
-                next_sum = 0.0
-                next_b = 0.0
+            if self.GAE :
+                # below are lambda-GAE logic. https://arxiv.org/pdf/1506.02438.pdf
+                lambda_ = 0.9
+                adv_n = []
+                for re in re_n :
+                    b_base = len(adv_n)
+                    sub_adv = np.empty(len(re))
 
-                for t in reversed(range(len(re))) :
-                    # adv(t) := re(t) - b(t) + [adv(t+1) * lambda * gamma + b(t+1) * gamma]
-                    # where adv(t+1) + b(t+1) would be Q(t+1)
-                    # so lambda works only on adv part (not on baseline part)
-                    sub_adv[t] = lambda_ * next_sum + re[t] + next_b - b_n[b_base + t]
-                    next_sum = sub_adv[t] * self.gamma
-                    next_b = b_n[b_base + t] * self.gamma
-                    
-                if not self.reward_to_go:
-                    sub_adv = np.ones(shape=[len(re)]) * sub_adv[0]
+                    next_sum = 0.0
+                    next_b = 0.0
 
-                adv_n.extend(sub_adv)
-            
-            adv_n_orig = q_n - b_n
-            print('adv_n:', np.array(adv_n), 'adv_n_orig:', adv_n_orig, ', q_n:', np.array(q_n), ', b_n:', b_n)
-            '''
-            adv_n = q_n - b_n
-            '''
+                    for t in reversed(range(len(re))) :
+                        # adv(t) := re(t) - b(t) + [adv(t+1) * lambda * gamma + b(t+1) * gamma]
+                        # where adv(t+1) + b(t+1) would be Q(t+1)
+                        # so lambda works only on adv part (not on baseline part)
+                        sub_adv[t] = lambda_ * next_sum + re[t] + next_b - b_n[b_base + t]
+                        next_sum = sub_adv[t] * self.gamma
+                        next_b = b_n[b_base + t] * self.gamma
+
+                    if not self.reward_to_go:
+                        sub_adv = np.ones(shape=[len(re)]) * sub_adv[0]
+
+                    adv_n.extend(sub_adv)
+
+                adv_n_orig = q_n - b_n
+                print('adv_n:', np.array(adv_n), 'adv_n_orig:', adv_n_orig, ', q_n:', np.array(q_n), ', b_n:', b_n, ', re_n:', np.array(re_n))
+            else :
+                adv_n = q_n - b_n
         else:
             adv_n = q_n.copy()
         return adv_n
@@ -633,7 +630,7 @@ class Agent(object):
                 self.sy_adv_n : np.array(adv_n)
             }
 
-            print('discrete:', self.discrete, ', nn_baseline:', self.nn_baseline, ', normalize_advantages:', self.normalize_advantages, ', reward_to_go:', self.reward_to_go, ', ac_na shape:', np.shape(ac_na), ', evaluated ac_na shape:', np.shape(ac_na_evaluated))
+            print('discrete:', self.discrete, ', nn_baseline:', self.nn_baseline, ', normalize_advantages:', self.normalize_advantages, ', reward_to_go:', self.reward_to_go, ', ac_na shape:', np.array(ac_na), ', evaluated ac_na shape:', np.array(ac_na_evaluated))
             
             print('before update, loss:', self.sess.run(self.loss, feed_dict=feed_dict))
             sy_logprob_n, sy_adv_n, loss,  _ = self.sess.run(targets, feed_dict=feed_dict)
@@ -690,7 +687,8 @@ def train_PG(
         nn_baseline, 
         seed,
         n_layers,
-        size):
+        size,
+        gae):
 
     start = time.time()
 
@@ -721,7 +719,7 @@ def train_PG(
     ob_dim = env.observation_space.shape[0]
     ac_dim = env.action_space.n if discrete else env.action_space.shape[0]
 
-    print('ob_dim :', ob_dim, ', ac_dim:', ac_dim, ', discrete:', discrete)
+    print('ob_dim :', ob_dim, ', ac_dim:', ac_dim, ', discrete:', discrete, ', gae:', gae)
 
     #========================================================================================#
     # Initialize Agent
@@ -746,6 +744,7 @@ def train_PG(
         'reward_to_go': reward_to_go,
         'nn_baseline': nn_baseline,
         'normalize_advantages': normalize_advantages,
+        'gae': gae,
     }
 
     # print('computation_graph_args :', computation_graph_args, ', sample_trajectory_args:', sample_trajectory_args, ', estimate_return_args', estimate_return_args)
@@ -818,6 +817,7 @@ def main():
     parser.add_argument('--n_experiments', '-e', type=int, default=1)
     parser.add_argument('--n_layers', '-l', type=int, default=2)
     parser.add_argument('--size', '-s', type=int, default=64)
+    parser.add_argument('--gae', action='store_true')
     args = parser.parse_args()
 
     if not(os.path.exists('data')):
@@ -851,14 +851,15 @@ def main():
                 nn_baseline=args.nn_baseline, 
                 seed=seed,
                 n_layers=args.n_layers,
-                size=args.size
+                size=args.size,
+                gae=args.gae
                 )
         # # Awkward hacky process runs, because Tensorflow does not like
         # # repeatedly calling train_PG in the same thread.
         # p = Process(target=train_func, args=tuple())
         argv_tuple = (args.exp_name, args.env_name, args.n_iter, args.discount, args.batch_size,
                       max_path_length, args.learning_rate, args.reward_to_go, args.render, os.path.join(logdir,'%d'%seed),
-                      not(args.dont_normalize_advantages),  args.nn_baseline, seed, args.n_layers, args.size)
+                      not(args.dont_normalize_advantages),  args.nn_baseline, seed, args.n_layers, args.size, args.gae)
         p = Process(target=train_PG, args=argv_tuple)
         p.start()
         processes.append(p)
