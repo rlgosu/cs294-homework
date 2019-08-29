@@ -259,7 +259,7 @@ class Agent(object):
                                 1,
                                 "nn_critic",
                                 n_layers=self.n_layers,
-                                size=self.size))
+                                size=self.size)[-1])
         self.sy_target_n = tf.placeholder(shape=[None], name="critic_target", dtype=tf.float32)
         self.critic_loss = tf.losses.mean_squared_error(self.sy_target_n, self.critic_prediction)
         self.critic_update_op = tf.train.AdamOptimizer(self.learning_rate).minimize(self.critic_loss)
@@ -593,7 +593,12 @@ def main():
                 )
         # # Awkward hacky process runs, because Tensorflow does not like
         # # repeatedly calling train_AC in the same thread.
-        p = Process(target=train_func, args=tuple())
+        # p = Process(target=train_func, args=tuple())
+        argv_tuple = (args.exp_name, args.env_name, args.n_iter, args.discount, args.batch_size,
+                      max_path_length, args.learning_rate, args.num_target_updates, args.num_grad_steps_per_target_update,
+                      args.render, os.path.join(logdir,'%d'%seed),
+                      not(args.dont_normalize_advantages), seed, args.n_layers, args.size)
+        p = Process(target=train_AC, args=argv_tuple)
         p.start()
         processes.append(p)
         # if you comment in the line below, then the loop will block 
