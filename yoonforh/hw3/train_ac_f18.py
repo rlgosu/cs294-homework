@@ -207,7 +207,7 @@ class Agent(object):
             print('sy_logits_na:', np.shape(sy_logits_na), 'sy_ac_na:', np.shape(sy_ac_na))
             # softmax_cross_entroy_with_logits_v2 computes the cross entropy of the result after applying the softmax function.
             # the value will be negative log probability
-            sy_logprob_n = -tf.nn.softmax_cross_entropy_with_logits_v2(logits=sy_logits_na, labels=tf.expand_dims(sy_ac_na, -1))
+            sy_logprob_n = -tf.nn.sparse_softmax_cross_entropy_with_logits(labels=sy_ac_na, logits=sy_logits_na) # 
             print('sy_logprob_n shape:', np.shape(sy_logprob_n))
         else:
             sy_mean, sy_logstd = policy_parameters
