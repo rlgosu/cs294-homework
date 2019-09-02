@@ -511,7 +511,8 @@ class Agent(object):
                     adv_n.extend(sub_adv)
 
                 adv_n_orig = q_n - b_n
-                print('adv_n:', np.array(adv_n), 'adv_n_orig:', adv_n_orig, ', q_n:', np.array(q_n), ', b_n:', b_n, ', re_n:', np.array(re_n))
+                print('adv_n:', np.array(adv_n), 'adv_n_orig:', adv_n_orig, ', q_n:', np.array(q_n),
+                      ', b_n:', b_n, ', re_n:', np.array(re_n), ', batch_avg:', batch_avg, ', batch_std:', batch_std)
             else :
                 adv_n = q_n - b_n
         else:
