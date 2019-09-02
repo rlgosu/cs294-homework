@@ -71,15 +71,15 @@ def descale_signed(data, minv, maxv): # value 0 is preserved even after rescale
     
     return data * (maxv + 1e-7)
 
-def scale_zscore(data, mu=0, sigma=1):
+def scale_zscore(data, mu=0, sigma=1): # make N(avg, std) -> N(mu, sigma)
     avg = np.mean(data, 0)
     std = np.std(data, 0)
 
     # noise term prevents the zero division
-    return (data - avg + mu) / (std + 1e-7) * sigma, avg, std
+    return (data - avg) / (std + 1e-7) * sigma + mu, avg, std
 
-def descale_zscore(data, avg, std, mu=0, sigma=1):
-    return data * (std + 1e-7) / sigma + avg - mu
+def descale_zscore(data, avg, std, mu=0, sigma=1): # make N(mu, sigma) -> N(avg, std)
+    return (data - mu) / (sigma + 1e-7) * std + avg
 
 def check_nan(x) :
     return (x is np.nan or x != x)
@@ -118,12 +118,12 @@ def build_hypothesis(input_placeholder, output_size, scope_name, n_layers, size,
             neuron = neurons[i]
 
             layer = tf.layers.dense(layer, neuron,
-                                    kernel_initializer = tf.contrib.layers.xavier_initializer(seed=default_random_seed),
+                                    kernel_initializer = tf.contrib.layers.xavier_initializer(), # don't fix seed
                                     activation=activation,
                                     name = 'layer-' + str(i))
             layers.append(layer)
         layer = tf.layers.dense(layer, output_size,
-                                kernel_initializer = tf.contrib.layers.xavier_initializer(seed=default_random_seed),
+                                kernel_initializer = tf.contrib.layers.xavier_initializer(), # don't fix seed
                                 activation=output_activation,
                                 name = 'layer-last')
         layers.append(layer)
