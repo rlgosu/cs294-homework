@@ -337,7 +337,7 @@ class Agent(object):
         v_t = self.sess.run(self.critic_prediction, feed_dict={self.sy_ob_no : np.array(ob_no, dtype=np.float32)})
         v_tp1 = self.sess.run(self.critic_prediction, feed_dict={self.sy_ob_no : np.array(next_ob_no, dtype=np.float32)})
 
-        adv_n = re_n + self.gamma * v_tp1 - v_t
+        adv_n = re_n + self.gamma * v_tp1 * (1.0 - terminal_n) - v_t
 
         print('adv_n:', np.array(adv_n), 're_n:', np.array(re_n), ', v_tp1:', np.array(v_tp1), ', v_t:', np.array(v_t))
         
