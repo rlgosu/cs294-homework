@@ -38,7 +38,7 @@ def build_mlp(input_placeholder, output_size, scope, n_layers, size, activation=
     """
     # YOUR HW2 CODE HERE
     return mlp.build_hypothesis(input_placeholder, output_size, scope, n_layers, size,
-                                activation=activation, output_activation=output_activation)
+                                activation=activation, output_activation=output_activation)[-1]
 
 def pathlength(path):
     return len(path["reward"])
@@ -126,15 +126,14 @@ class Agent(object):
                 Pass in self.n_layers for the 'n_layers' argument, and
                 pass in self.size for the 'size' argument.
         """
-        self.layers = build_mlp(sy_ob_no, self.ac_dim, 'mlp', self.n_layers, self.size, activation=tf.tanh)
-        ac_hypothesis = self.layers[-1]
+        self.ac_hypothesis = build_mlp(sy_ob_no, self.ac_dim, 'mlp', self.n_layers, self.size, activation=tf.tanh)
         
         if self.discrete:
-            # print('ac_hypothesis:', ac_hypothesis)
+            # print('ac_hypothesis:', self.ac_hypothesis)
             sy_logits_na = ac_hypothesis
             return sy_logits_na
         else:
-            sy_mean = ac_hypothesis
+            sy_mean = self.ac_hypothesis
             sy_logstd = tf.get_variable('logstd', shape=[ self.ac_dim ],
                                         initializer = tf.zeros_initializer,
                                         dtype=tf.float32)
@@ -170,11 +169,10 @@ class Agent(object):
             # action_dist = tf.nn.softmax(sy_logits_na) # softmax distribution of actions
             # dist = tfp.distributions.Categorical(probs=action_dist)
             # dist = tfp.distributions.Categorical(logits=tf.reshape(sy_logits_na, [-1])) # reshape to flatten
-            dist = tfp.distributions.Categorical(logits=sy_logits_na)
-            sy_sampled_ac = dist.sample()
-            '''
+            # dist = tfp.distributions.Categorical(logits=sy_logits_na)
+            # sy_sampled_ac = dist.sample()
             sy_sampled_ac = tf.random.multinomial(logits=sy_logits_na, num_samples=1)
-            '''
+            sy_sampled_ac = tf.squeeze(sy_sampled_ac, axis=[-1])
             print('sy_sampled_ac shape:', np.shape(sy_sampled_ac))
         else:
             sy_mean, sy_logstd = policy_parameters
@@ -255,11 +253,11 @@ class Agent(object):
 
         # define the critic
         self.critic_prediction = tf.squeeze(build_mlp(
-                                self.sy_ob_no,
-                                1,
-                                "nn_critic",
-                                n_layers=self.n_layers,
-                                size=self.size)[-1])
+            self.sy_ob_no,
+            1,
+            "nn_critic",
+            n_layers=self.n_layers,
+            size=self.size))
         self.sy_target_n = tf.placeholder(shape=[None], name="critic_target", dtype=tf.float32)
         self.critic_loss = tf.losses.mean_squared_error(self.sy_target_n, self.critic_prediction)
         self.critic_update_op = tf.train.AdamOptimizer(self.learning_rate).minimize(self.critic_loss)
@@ -286,7 +284,7 @@ class Agent(object):
                 env.render()
                 time.sleep(0.1)
             obs.append(ob)
-            layers, params, ac = self.sess.run([self.layers, self.policy_parameters, self.sy_sampled_ac], feed_dict= { self.sy_ob_no : np.expand_dims(ob, 0) } )
+            hypothesis, params, ac = self.sess.run([self.ac_hypothesis, self.policy_parameters, self.sy_sampled_ac], feed_dict= { self.sy_ob_no : np.expand_dims(ob, 0) } )
             ac = ac[0]
             acs.append(ac)
             ob, rew, done, _ = env.step(ac)
