@@ -141,7 +141,7 @@ class QLearner(object):
     if lander:
       obs_t_float = self.obs_t_ph
       obs_tp1_float = self.obs_tp1_ph
-    else:
+    else: # unit8 -> float32
       obs_t_float   = tf.cast(self.obs_t_ph,   tf.float32) / 255.0
       obs_tp1_float = tf.cast(self.obs_tp1_ph, tf.float32) / 255.0
 
@@ -175,15 +175,17 @@ class QLearner(object):
     self.target_q_network = q_func(obs_tp1_float, self.num_actions, 'target_q_network', False)
 
     # r + gamma * Q^*(s', a')
-    # self.q_tp1 = self.rew_t_ph + tf.math.reduce_max(tf.where(self.done_mask_ph == 1.0, 0.0, gamma) * self.target_q_network, axis=-1)
-    self.q_tp1 = tf.where(self.done_mask_ph == 1.0, self.rew_t_ph, self.rew_t_ph + gamma * tf.math.reduce_max(self.target_q_network, axis=-1))
+    # self.v_t = self.rew_t_ph + tf.math.reduce_max(tf.where(self.done_mask_ph == 1.0, 0.0, gamma) * self.target_q_network, axis=-1)
+    self.v_t = tf.where(self.done_mask_ph == 1.0, self.rew_t_ph, self.rew_t_ph + gamma * tf.math.reduce_max(self.target_q_network, axis=-1))
     # q network value is expected return of the s, self.act_t_ph. i.e, Q(s, a) --> q_network(obs_t_float, act_t_ph)
     self.q_t = tf.squeeze(tf.gather(self.q_network, tf.expand_dims(self.act_t_ph, -1), axis=-1, batch_dims=-1), axis=[-1])
-    # self.total_error = huber_loss(self.q_tp1 - self.q_t)
-    self.total_error = tf.losses.mean_squared_error(self.q_tp1, self.q_t)
+    self.total_error = huber_loss(self.v_t - self.q_t)
+    # self.total_error = tf.losses.mean_squared_error(self.v_t, self.q_t)
 
     q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='q_network')
+    print('q_func_vars:', q_func_vars)
     target_q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='target_q_network')
+    print('target_q_func_vars:', target_q_func_vars)
     
     ######
 
@@ -267,10 +269,10 @@ class QLearner(object):
       self.decide_count += 1
       # print('self.obs_t_ph:', np.expand_dims(encoded, 0))
     new_ob, reward, done, _ = self.env.step(action)
+    self.replay_buffer.store_effect(saved_idx, action, reward, done)
+    
     if done :
       new_ob = self.env.reset()
-      print('done:True, action:', action, ', reward:', reward) 
-    self.replay_buffer.store_effect(saved_idx, action, reward, done)
     self.last_obs = new_ob
 
   def update_model(self):
@@ -320,9 +322,6 @@ class QLearner(object):
 
       # YOUR CODE HERE
       obs_t_batch, act_t_batch, rew_t_batch, obs_tp1_batch, done_mask = self.replay_buffer.sample(self.batch_size)
-      if np.sum(np.where(done_mask)) > 0.0 :
-        print('DONE INCLUDED:', done_mask)
-
       if not self.model_initialized :
         initialize_interdependent_variables(self.session, tf.global_variables(), {
           self.obs_t_ph: obs_t_batch,
@@ -331,22 +330,28 @@ class QLearner(object):
         self.session.run(self.update_target_fn)
         self.model_initialized = True
 
-      q_tp1, q_t, total_error, _ = self.session.run([self.q_tp1, self.q_t, self.total_error, self.train_fn], feed_dict = {
+      feed_dict = {
         self.obs_t_ph : obs_t_batch,
         self.act_t_ph : act_t_batch,
         self.rew_t_ph : rew_t_batch,
         self.obs_tp1_ph : obs_tp1_batch,
         self.done_mask_ph : done_mask,
         self.learning_rate : self.optimizer_spec.lr_schedule.value(self.t),
-        })
+      }
+      v_t, q_t, total_error = self.session.run([ self.v_t, self.q_t, self.total_error ], feed_dict = feed_dict)
+      self.session.run(self.train_fn, feed_dict = feed_dict)
 
       self.num_param_updates += 1
       if self.num_param_updates % self.target_update_freq == 0 :
         self.session.run(self.update_target_fn)
-        print('obs_t:', np.array(obs_t_batch), ', act_t:', np.array(act_t_batch), ', rew_t:', np.array(rew_t_batch),
-              ', obs_tp1:', np.array(obs_tp1_batch), ', done:', np.array(done_mask), ', lr:', self.optimizer_spec.lr_schedule.value(self.t))
-        print('q_tp1:', np.array(q_tp1), ', q_t:', np.array(q_t), ', total_error:', np.array(total_error), ', t:', self.t)
-        # print('total_error:', np.array(total_error), ', t:', self.t)
+        if np.sum(np.where(done_mask)) > 0.0 :
+          print('DONE INCLUDED:', done_mask)
+
+          print('obs_t:', np.array(obs_t_batch), ', act_t:', np.array(act_t_batch), ', rew_t:', np.array(rew_t_batch),
+                ', obs_tp1:', np.array(obs_tp1_batch), ', done:', np.array(done_mask), ', lr:', self.optimizer_spec.lr_schedule.value(self.t))
+          print('v_t:', np.array(v_t), ', q_t:', np.array(q_t))
+          print('v_t - q_t:', np.array(v_t) - np.array(q_t))
+          print('total_error:', np.array(total_error), ', t:', self.t)
 
     self.t += 1
 
