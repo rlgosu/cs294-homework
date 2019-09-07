@@ -169,16 +169,18 @@ class QLearner(object):
 
     # current q network = behavior network.
     self.q_network = q_func(obs_t_float, self.num_actions, 'q_network', False) # q_func returns the q values of each actions. so only discrete actions are applicable
-    # next q network = target network.
 
+    # next q network = target network.
     # next_q will be the greedy q expectations of s', a' and
     self.target_q_network = q_func(obs_tp1_float, self.num_actions, 'target_q_network', False)
 
     # r + gamma * Q^*(s', a')
-    self.q_tp1 = self.rew_t_ph + tf.math.reduce_max(tf.where(self.done_mask_ph == 1.0, 0.0, gamma) * self.target_q_network, axis=-1)
-    # q network value is expected return of the s, self.act_t_ph
+    # self.q_tp1 = self.rew_t_ph + tf.math.reduce_max(tf.where(self.done_mask_ph == 1.0, 0.0, gamma) * self.target_q_network, axis=-1)
+    self.q_tp1 = tf.where(self.done_mask_ph == 1.0, self.rew_t_ph, self.rew_t_ph + gamma * tf.math.reduce_max(self.target_q_network, axis=-1))
+    # q network value is expected return of the s, self.act_t_ph. i.e, Q(s, a) --> q_network(obs_t_float, act_t_ph)
     self.q_t = tf.squeeze(tf.gather(self.q_network, tf.expand_dims(self.act_t_ph, -1), axis=-1, batch_dims=-1), axis=[-1])
-    self.total_error = huber_loss(self.q_tp1 - self.q_t)
+    # self.total_error = huber_loss(self.q_tp1 - self.q_t)
+    self.total_error = tf.losses.mean_squared_error(self.q_tp1, self.q_t)
 
     q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='q_network')
     target_q_func_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='target_q_network')
@@ -252,17 +254,23 @@ class QLearner(object):
     #####
     # YOUR CODE HERE
     ob = self.last_obs
-    next_idx = self.replay_buffer.store_frame(ob) # returns old idx
+    saved_idx = self.replay_buffer.store_frame(ob) # returns old idx
     encoded = self.replay_buffer.encode_recent_observation()
 
     if not self.model_initialized or np.random.rand() <= self.exploration.value(self.t) : # we need to explore by 10 percent
       action = np.random.randint(0, self.num_actions)
+      self.rand_count += 1
     else :
-      action = np.argmax(self.session.run(self.q_network, feed_dict= { self.obs_t_ph : np.expand_dims(encoded, 0) }))
+      action = np.argmax(self.session.run(self.q_network,
+                                          feed_dict= { self.obs_t_ph : np.expand_dims(encoded, 0) } # make 1 batch-size input
+      ))
+      self.decide_count += 1
+      # print('self.obs_t_ph:', np.expand_dims(encoded, 0))
     new_ob, reward, done, _ = self.env.step(action)
     if done :
       new_ob = self.env.reset()
-    self.replay_buffer.store_effect(next_idx, action, reward, done)
+      print('done:True, action:', action, ', reward:', reward) 
+    self.replay_buffer.store_effect(saved_idx, action, reward, done)
     self.last_obs = new_ob
 
   def update_model(self):
@@ -312,6 +320,8 @@ class QLearner(object):
 
       # YOUR CODE HERE
       obs_t_batch, act_t_batch, rew_t_batch, obs_tp1_batch, done_mask = self.replay_buffer.sample(self.batch_size)
+      if np.sum(np.where(done_mask)) > 0.0 :
+        print('DONE INCLUDED:', done_mask)
 
       if not self.model_initialized :
         initialize_interdependent_variables(self.session, tf.global_variables(), {
@@ -333,7 +343,10 @@ class QLearner(object):
       self.num_param_updates += 1
       if self.num_param_updates % self.target_update_freq == 0 :
         self.session.run(self.update_target_fn)
-        # print('q_tp1:', np.array(q_tp1), ', q_t:', np.array(q_t), ', total_error:', np.array(total_error), ', t:', self.t)
+        print('obs_t:', np.array(obs_t_batch), ', act_t:', np.array(act_t_batch), ', rew_t:', np.array(rew_t_batch),
+              ', obs_tp1:', np.array(obs_tp1_batch), ', done:', np.array(done_mask), ', lr:', self.optimizer_spec.lr_schedule.value(self.t))
+        print('q_tp1:', np.array(q_tp1), ', q_t:', np.array(q_t), ', total_error:', np.array(total_error), ', t:', self.t)
+        # print('total_error:', np.array(total_error), ', t:', self.t)
 
     self.t += 1
 
@@ -357,6 +370,9 @@ class QLearner(object):
       if self.start_time is not None:
         print("running time %f" % ((time.time() - self.start_time) / 60.))
 
+      print("exploration count %f, exploitation count %f" %(self.rand_count, self.decide_count))
+      self.rand_count = 0
+      self.decide_count = 0
       self.start_time = time.time()
 
       sys.stdout.flush()
@@ -366,6 +382,8 @@ class QLearner(object):
 
 def learn(*args, **kwargs):
   alg = QLearner(*args, **kwargs)
+  alg.rand_count = 0
+  alg.decide_count = 0
   while not alg.stopping_criterion_met():
     alg.step_env()
     # at this point, the environment should have been advanced one step (and
