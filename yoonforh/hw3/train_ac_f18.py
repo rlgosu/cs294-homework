@@ -130,7 +130,7 @@ class Agent(object):
         
         if self.discrete:
             # print('ac_hypothesis:', self.ac_hypothesis)
-            sy_logits_na = ac_hypothesis
+            sy_logits_na = self.ac_hypothesis
             return sy_logits_na
         else:
             sy_mean = self.ac_hypothesis
