@@ -248,7 +248,7 @@ class Agent(object):
         # This is used in the loss function.
         self.sy_logprob_n = self.get_log_prob(self.policy_parameters, self.sy_ac_na)
 
-        actor_loss = tf.reduce_sum(-self.sy_logprob_n * self.sy_adv_n)
+        actor_loss = tf.reduce_mean(-tf.multiply(self.sy_logprob_n, self.sy_adv_n)) # N can differ so, use mean
         self.actor_update_op = tf.train.AdamOptimizer(self.learning_rate).minimize(actor_loss)
 
         # define the critic
@@ -378,20 +378,22 @@ class Agent(object):
               ', target update counts:', self.num_target_updates)
 
         for u in range(self.num_target_updates) : # number of target refresh
-            next_v_prediction = self.sess.run(self.critic_prediction, feed_dict={self.sy_ob_no : np.array(next_ob_no, dtype=np.float32)})
+            v_tp1 = self.sess.run(self.critic_prediction, feed_dict={self.sy_ob_no : np.array(next_ob_no, dtype=np.float32)})
 
-            target_n = [ re_n[t] + 0.0 if terminal_n[t] == 1.0 else self.gamma * next_v_prediction[t] for t in range(len(re_n)) ]
+            # we assume that MC rollout-estimated q_t will converge to v_t
+            # q_t_mc = [ re_n[t] + 0.0 if terminal_n[t] == 1.0 else self.gamma * v_tp1[t] for t in range(len(re_n)) ]
+            q_t_mc = re_n + self.gamma * v_tp1 * (1.0 - terminal_n)
 
             critic_feed_dict = {
                 self.sy_ob_no : np.array(ob_no, dtype=np.float32),
-                self.sy_target_n : target_n
+                self.sy_target_n : q_t_mc
             }
 
             for s in range(self.num_grad_steps_per_target_update) : # number of grads per given target estimation
                 critic_prediction, critic_loss_before, _ = self.sess.run(critic_targets, feed_dict=critic_feed_dict)
                 critic_loss_after = self.sess.run(self.critic_loss, feed_dict=critic_feed_dict)
                 print('[', s, '] critic loss:', critic_loss_before, ' to ', critic_loss_after,
-                      ', batch_avg:', np.mean(target_n, axis=0), ', batch_std:', np.std(target_n, axis=0))
+                      ', batch_avg:', np.mean(q_t_mc, axis=0), ', batch_std:', np.std(q_t_mc, axis=0))
 
     def update_actor(self, ob_no, ac_na, adv_n):
         """ 
