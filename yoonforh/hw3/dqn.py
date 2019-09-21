@@ -126,7 +126,7 @@ class QLearner(object):
         tf.float32 if lander else tf.uint8, [None] + list(input_shape))
     # placeholder for current action
     self.act_t_ph              = tf.placeholder(tf.int32,   [None])
-    # placeholder for enxt action
+    # placeholder for next action
     if self.double_q :
       self.act_tp1_ph              = tf.placeholder(tf.int32,   [None])
     # placeholder for current reward
