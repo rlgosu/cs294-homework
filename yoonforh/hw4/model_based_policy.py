@@ -138,7 +138,10 @@ class ModelBasedPolicy(object):
         """
         ### PROBLEM 2
         ### YOUR CODE HERE
-        ## HERE TO GO
+        # state = tf.slice(state_ph, [0, 0], [1, -1])
+        state = state_ph[:1, :]
+        actions = (self._action_space_high - self._action_space_low) * np.random.random_sample(self._num_random_action_selection, self._horizon) + self._action_space_low
+
         
         raise NotImplementedError
 
