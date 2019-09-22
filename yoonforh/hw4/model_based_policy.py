@@ -72,7 +72,7 @@ class ModelBasedPolicy(object):
         action_norm = utils.normalize(action, ids.action_mean, ids.action_std)
 
         input_norm = tf.concat([state_norm, action_norm], axis=-1)
-        predict_delta_norm = utils.build_mlp(input_norm, self._state_dim, 'model', n_layers=self.n_layers, reuse=reuse)
+        predict_delta_norm = utils.build_mlp(input_norm, self._state_dim, 'model', n_layers=self._nn_layers, reuse=reuse)
         predict_delta = utils.unnormalize(predict_delta_norm, ids.state_mean, ids.state_std)
         next_state_pred = state + predict_delta
         
@@ -98,6 +98,8 @@ class ModelBasedPolicy(object):
         """
         ### PROBLEM 1
         ### YOUR CODE HERE
+        ids = self._init_dataset
+        
         actual_delta = next_state_ph - state_ph
         actual_delta_norm = utils.normalize(actual_delta, ids.state_mean, ids.state_std)
         predict_delta = next_state_pred - state_ph
@@ -152,10 +154,14 @@ class ModelBasedPolicy(object):
 
         ### PROBLEM 1
         ### YOUR CODE HERE
-        raise NotImplementedError
+
+        state_ph, action_ph, next_state_ph = self._setup_placeholders()
+        next_state_pred = self._dynamics_func(state_ph, action_ph, False)
+        loss, optimizer = self._setup_training(state_ph, next_state_ph, next_state_pred)
+
         ### PROBLEM 2
         ### YOUR CODE HERE
-        best_action = None
+        best_action = self._setup_action_selection(state_ph)
 
         sess.run(tf.global_variables_initializer())
 
