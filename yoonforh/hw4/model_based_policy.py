@@ -11,7 +11,8 @@ class ModelBasedPolicy(object):
                  init_dataset,
                  horizon=15,
                  num_random_action_selection=4096,
-                 nn_layers=1):
+                 nn_layers=1,
+                 scope='mbp'):
         self._cost_fn = env.cost_fn
         self._state_dim = env.observation_space.shape[0]
         self._action_dim = env.action_space.shape[0]
@@ -159,7 +160,7 @@ class ModelBasedPolicy(object):
         ### YOUR CODE HERE
 
         state_ph, action_ph, next_state_ph = self._setup_placeholders()
-        next_state_pred = self._dynamics_func(state_ph, action_ph, False)
+        next_state_pred = self._dynamics_func(state_ph, action_ph, True) # reuse=True
         loss, optimizer = self._setup_training(state_ph, next_state_ph, next_state_pred)
 
         ### PROBLEM 2
