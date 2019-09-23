@@ -171,7 +171,7 @@ class ModelBasedPolicy(object):
         return sess, state_ph, action_ph, next_state_ph, \
                 next_state_pred, loss, optimizer, best_action
 
-    def train_step(self, states, actions, next_states):
+    def train_step(self, states, actions, next_states): # doing mini-batch
         """
         Performs one step of gradient descent
 
@@ -180,7 +180,11 @@ class ModelBasedPolicy(object):
         """
         ### PROBLEM 1
         ### YOUR CODE HERE
-        raise NotImplementedError
+        _, loss = self._sess.run([self._optimizer, self._loss], feed_dict={ 
+            self._state_ph : states,
+            self._action_ph : actions,
+            self._next_state_ph : next_states,
+            })
 
         return loss
 
@@ -199,7 +203,11 @@ class ModelBasedPolicy(object):
 
         ### PROBLEM 1
         ### YOUR CODE HERE
-        raise NotImplementedError
+        next_state_pred = self._sess.run(self._next_state_pred, feed_dict={ 
+            self._state_ph : [state],
+            self._action_ph : [action],
+            })
+        
 
         assert np.shape(next_state_pred) == (self._state_dim,)
         return next_state_pred
