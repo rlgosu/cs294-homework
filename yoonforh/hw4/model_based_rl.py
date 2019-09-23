@@ -85,7 +85,7 @@ class ModelBasedRL(object):
         losses = []
         ### PROBLEM 1
         ### YOUR CODE HERE
-        for epoch in self._training_epochs :
+        for epoch in range(self._training_epochs) :
             for row in dataset.random_iterator(self._training_batch_size) :
                 states, actions, next_states, rewards, dones = row
 
