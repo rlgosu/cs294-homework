@@ -23,6 +23,7 @@ class ModelBasedPolicy(object):
         self._num_random_action_selection = num_random_action_selection
         self._nn_layers = nn_layers
         self._learning_rate = 1e-3
+        self._scope = scope
 
         self._sess, self._state_ph, self._action_ph, self._next_state_ph,\
             self._next_state_pred, self._loss, self._optimizer, self._best_action = self._setup_graph()
@@ -73,7 +74,7 @@ class ModelBasedPolicy(object):
         action_norm = utils.normalize(action, ids.action_mean, ids.action_std)
 
         input_norm = tf.concat([state_norm, action_norm], axis=-1)
-        predict_delta_norm = utils.build_mlp(input_norm, self._state_dim, 'model', n_layers=self._nn_layers, reuse=reuse)
+        predict_delta_norm = utils.build_mlp(input_norm, self._state_dim, 'model' + self._scope, n_layers=self._nn_layers, reuse=reuse)
         predict_delta = utils.unnormalize(predict_delta_norm, ids.state_mean, ids.state_std)
         next_state_pred = state + predict_delta
         
@@ -141,11 +142,23 @@ class ModelBasedPolicy(object):
         ### YOUR CODE HERE
         # state = tf.slice(state_ph, [0, 0], [1, -1])
         state = state_ph[:1, :]
-        actions = (self._action_space_high - self._action_space_low) * np.random.random_sample((self._num_random_action_selection, self._horizon)) + self._action_space_low
+        actions = (self._action_space_high - self._action_space_low) * tf.random.uniform([self._horizon, self._num_random_action_selection, self._action_dim]) \
+            + self._action_space_low # (horizon, num_action_selection, action_dim)
 
-        
-        raise NotImplementedError
+        state_tile = tf.tile(state, [self._num_random_action_selection, 1])
+        cond = lambda step, x : tf.less(step, self._horizon)
+        def body(step, curr_states, costs) :
+            next_state_preds = self._dynamics_func(curr_states, actions[step, :, :], True)
+            cost = self._cost_fn(curr_states, actions[step, :, :], next_state_preds)
+            return step + 1, next_state_preds, tf.concat([costs, cost], 0)
 
+        _, _, costs = tf.while_loop(cond, body, [tf.constant(0), state_tile, []],
+                                    shape_invariants=[ tf.TensorShape([]),
+                                                       tf.TensorShape(self._num_random_action_selection, self._state_dim),
+                                                       tf.TensorShape(self._horizon, self._num_random_action_selection)])
+        cost_sums = tf.reduce_sum(costs, axis=0)
+        best_index = tf.argmin(cost_sums)
+        best_action = actions[0, best_index, 0]
         return best_action
 
     def _setup_graph(self):
@@ -160,12 +173,12 @@ class ModelBasedPolicy(object):
         ### YOUR CODE HERE
 
         state_ph, action_ph, next_state_ph = self._setup_placeholders()
-        next_state_pred = self._dynamics_func(state_ph, action_ph, True) # reuse=True
+        next_state_pred = self._dynamics_func(state_ph, action_ph)
         loss, optimizer = self._setup_training(state_ph, next_state_ph, next_state_pred)
 
         ### PROBLEM 2
         ### YOUR CODE HERE
-        best_action = None # self._setup_action_selection(state_ph)
+        best_action = self._setup_action_selection(state_ph)
 
         sess.run(tf.global_variables_initializer())
 
@@ -224,7 +237,9 @@ class ModelBasedPolicy(object):
 
         ### PROBLEM 2
         ### YOUR CODE HERE
-        raise NotImplementedError
+        best_action = self._sess.run(self._best_action, feed_dict={
+            self._state_ph : [state],
+            })
 
         assert np.shape(best_action) == (self._action_dim,)
         return best_action
