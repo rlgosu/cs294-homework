@@ -152,11 +152,16 @@ class ModelBasedPolicy(object):
             cost = tf.expand_dims(self._cost_fn(curr_states, actions[step, :, :], next_state_preds), 0)
             return step + 1, next_state_preds, tf.cond(tf.equal(step, 0), lambda: cost, lambda : tf.concat([costs, cost], 0))
 
-        _, _, costs = tf.while_loop(cond, body, [tf.constant(0), state_tile, []],
+        _, _, costs = tf.while_loop(cond, body, [tf.constant(0), state_tile, tf.zeros([0, self._num_random_action_selection])],
                                     shape_invariants=[ tf.TensorShape([]),
                                                        tf.TensorShape([None, self._state_dim]),
-                                                       tf.TensorShape([None, 1])])
-        best_index = tf.argmin(costs, axis=0) # (horizon, 1)
+                                                       tf.TensorShape([None, self._num_random_action_selection])])
+        cost_sums = tf.reduce_sum(costs, axis=0) # (horizon, num_random_action_selection)
+        print('cost_sums:', cost_sums)
+        self._cost_sums = cost_sums
+        best_index = tf.argmin(cost_sums)
+        self._best_index = best_index
+        self._state_tile = state_tile
         best_action = actions[0, best_index, :]
         return best_action
 
@@ -236,9 +241,10 @@ class ModelBasedPolicy(object):
 
         ### PROBLEM 2
         ### YOUR CODE HERE
-        best_action = self._sess.run(self._best_action, feed_dict={
+        best_action, cost_sums, best_index, state_tile = self._sess.run([self._best_action, self._cost_sums, self._best_index, self._state_tile], feed_dict={
             self._state_ph : [state],
             })
+        print('best action:', best_action, ', cost sums:', cost_sums, ', best index:', best_index, ', state_tile:', state_tile)
 
         assert np.shape(best_action) == (self._action_dim,)
         return best_action

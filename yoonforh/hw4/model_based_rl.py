@@ -132,8 +132,9 @@ class ModelBasedRL(object):
 
             ### PROBLEM 1
             ### YOUR CODE HERE
-            for state, action in zip(states, actions) :
-                pred_state = self._policy.predict(state, action)
+            pred_state = states[0]
+            for action in actions :
+                pred_state = self._policy.predict(pred_state, action)
                 pred_states.append(pred_state)
 
             states = np.asarray(states)
