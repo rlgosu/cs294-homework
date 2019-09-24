@@ -152,12 +152,11 @@ class ModelBasedPolicy(object):
             cost = tf.expand_dims(self._cost_fn(curr_states, actions[step, :, :], next_state_preds), 0)
             return step + 1, next_state_preds, tf.cond(tf.equal(step, 0), lambda: cost, lambda : tf.concat([costs, cost], 0))
 
-        _, _, costs = tf.while_loop(cond, body, [tf.constant(0), state_tile, tf.zeros([0, self._num_random_action_selection])],
+        _, _, costs = tf.while_loop(cond, body, [tf.constant(0), state_tile, []],
                                     shape_invariants=[ tf.TensorShape([]),
                                                        tf.TensorShape([None, self._state_dim]),
-                                                       tf.TensorShape([None, self._num_random_action_selection])])
-        cost_sums = tf.reduce_sum(costs, axis=0) # (horizon, num_random_action_selection)
-        best_index = tf.argmin(cost_sums)
+                                                       tf.TensorShape([None, 1])])
+        best_index = tf.argmin(costs, axis=0) # (horizon, 1)
         best_action = actions[0, best_index, :]
         return best_action
 
