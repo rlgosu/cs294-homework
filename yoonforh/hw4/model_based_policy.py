@@ -25,6 +25,7 @@ class ModelBasedPolicy(object):
         self._learning_rate = 1e-3
         self._scope = scope
 
+        print('init dataset state mean:', init_dataset.state_mean, ', state std:', init_dataset.state_std)
         self._sess, self._state_ph, self._action_ph, self._next_state_ph,\
             self._next_state_pred, self._loss, self._optimizer, self._best_action = self._setup_graph()
 
@@ -73,10 +74,13 @@ class ModelBasedPolicy(object):
         state_norm = utils.normalize(state, ids.state_mean, ids.state_std)
         action_norm = utils.normalize(action, ids.action_mean, ids.action_std)
 
+        self._state_norm = state_norm
         input_norm = tf.concat([state_norm, action_norm], axis=-1)
+        self._input_norm = input_norm
         predict_delta_norm = utils.build_mlp(input_norm, self._state_dim, 'model' + self._scope, n_layers=self._nn_layers, reuse=reuse)
-        predict_delta = utils.unnormalize(predict_delta_norm, ids.state_mean, ids.state_std)
-        next_state_pred = state + predict_delta
+        self._predict_norm = state_norm + predict_delta_norm
+        next_state_pred_norm = state_norm + predict_delta_norm
+        next_state_pred = utils.unnormalize(next_state_pred_norm, ids.state_mean, ids.state_std) # unnormalize the next_state not the delta (delta can be small so the unnormalize can make meaningless errors)
         
         return next_state_pred
 
@@ -102,11 +106,9 @@ class ModelBasedPolicy(object):
         ### YOUR CODE HERE
         ids = self._init_dataset
         
-        actual_delta = next_state_ph - state_ph
-        actual_delta_norm = utils.normalize(actual_delta, ids.state_mean, ids.state_std)
-        predict_delta = next_state_pred - state_ph
-        predict_delta_norm = utils.normalize(predict_delta, ids.state_mean, ids.state_std)
-        loss = tf.losses.mean_squared_error(actual_delta_norm, predict_delta_norm)
+        actual_delta_norm = utils.normalize(next_state_ph - state_ph, ids.state_mean, ids.state_std)
+        predict_delta_norm = utils.normalize(next_state_pred - state_ph, ids.state_mean, ids.state_std)
+        loss = tf.losses.mean_squared_error(actual_delta_norm, predict_delta_norm, reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE)
         optimizer = tf.train.AdamOptimizer(self._learning_rate).minimize(loss)
 
         return loss, optimizer
@@ -148,7 +150,7 @@ class ModelBasedPolicy(object):
         state_tile = tf.tile(state, [self._num_random_action_selection, 1])
         cond = lambda step, x, y : tf.less(step, self._horizon)
         def body(step, curr_states, costs) :
-            next_state_preds = self._dynamics_func(curr_states, actions[step, :, :], True)
+            next_state_preds = self._dynamics_func(curr_states, actions[step, :, :], True) # FIXME. calling _dyamics_func again?
             cost = tf.expand_dims(self._cost_fn(curr_states, actions[step, :, :], next_state_preds), 0)
             return step + 1, next_state_preds, tf.cond(tf.equal(step, 0), lambda: cost, lambda : tf.concat([costs, cost], 0))
 
@@ -157,7 +159,7 @@ class ModelBasedPolicy(object):
                                                        tf.TensorShape([None, self._state_dim]),
                                                        tf.TensorShape([None, self._num_random_action_selection])])
         cost_sums = tf.reduce_sum(costs, axis=0) # (horizon, num_random_action_selection)
-        print('cost_sums:', cost_sums)
+        # print('cost_sums:', cost_sums)
         self._cost_sums = cost_sums
         best_index = tf.argmin(cost_sums)
         self._best_index = best_index
@@ -221,11 +223,15 @@ class ModelBasedPolicy(object):
 
         ### PROBLEM 1
         ### YOUR CODE HERE
+        # next_state_pred, state_norm, input_norm, predict_norm = self._sess.run([self._next_state_pred, self._state_norm, self._input_norm, self._predict_norm], feed_dict={ 
         next_state_pred = self._sess.run(self._next_state_pred, feed_dict={ 
             self._state_ph : [state],
             self._action_ph : [action],
             })
         next_state_pred = next_state_pred[0]
+        # print('state_norm :', state_norm)
+        # print('input_norm :', input_norm)
+        # print('predicted_norm :', predict_norm)
 
         assert np.shape(next_state_pred) == (self._state_dim,)
         return next_state_pred
@@ -244,7 +250,7 @@ class ModelBasedPolicy(object):
         best_action, cost_sums, best_index, state_tile = self._sess.run([self._best_action, self._cost_sums, self._best_index, self._state_tile], feed_dict={
             self._state_ph : [state],
             })
-        print('best action:', best_action, ', cost sums:', cost_sums, ', best index:', best_index, ', state_tile:', state_tile)
+        # print('best action:', best_action, ', cost sums:', cost_sums, ', best index:', best_index, ', state_tile:', state_tile)
 
         assert np.shape(best_action) == (self._action_dim,)
         return best_action

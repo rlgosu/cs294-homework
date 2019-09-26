@@ -97,6 +97,7 @@ class ModelBasedRL(object):
         logger.record_tabular('TrainingLossStart', losses[0])
         logger.record_tabular('TrainingLossFinal', losses[-1])
 
+        print('train losses:', np.array(losses))
         timeit.stop('train policy')
 
     def _log(self, dataset):
@@ -135,11 +136,16 @@ class ModelBasedRL(object):
             pred_state = states[0]
             for action in actions :
                 pred_state = self._policy.predict(pred_state, action)
+                if np.any(pred_state is None) or np.any(pred_state != pred_state) :
+                    print('NaN predicted::: action:', action, ', predicted state:', pred_state)
+                    break
                 pred_states.append(pred_state)
 
             states = np.asarray(states)
             pred_states = np.asarray(pred_states)
 
+            print('states:', states)
+            print('predicted states:', pred_states)
             state_dim = states.shape[1]
             rows = int(np.sqrt(state_dim))
             cols = state_dim // rows
@@ -195,16 +201,18 @@ class ModelBasedRL(object):
             ### PROBLEM 3
             ### YOUR CODE HERE
             logger.info('Training policy...')
-            raise NotImplementedError
+            self._train_policy(dataset)
 
             ### PROBLEM 3
             ### YOUR CODE HERE
             logger.info('Gathering rollouts...')
-            raise NotImplementedError
+            onpolicy_dataset = self._gather_rollouts(self._policy,
+                                                     num_onpolicy_rollouts) # rollout
 
             ### PROBLEM 3
             ### YOUR CODE HERE
             logger.info('Appending dataset...')
-            raise NotImplementedError
+            dataset.append(onpolicy_dataset)
+            new_dataset = dataset
 
             self._log(new_dataset)
