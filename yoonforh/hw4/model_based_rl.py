@@ -97,7 +97,7 @@ class ModelBasedRL(object):
         logger.record_tabular('TrainingLossStart', losses[0])
         logger.record_tabular('TrainingLossFinal', losses[-1])
 
-        print('train losses:', np.array(losses))
+        # print('train losses:', np.array(losses))
         timeit.stop('train policy')
 
     def _log(self, dataset):
@@ -144,8 +144,8 @@ class ModelBasedRL(object):
             states = np.asarray(states)
             pred_states = np.asarray(pred_states)
 
-            print('states:', states)
-            print('predicted states:', pred_states)
+            # print('states:', states)
+            # print('predicted states:', pred_states)
             state_dim = states.shape[1]
             rows = int(np.sqrt(state_dim))
             cols = state_dim // rows
@@ -207,7 +207,7 @@ class ModelBasedRL(object):
             ### YOUR CODE HERE
             logger.info('Gathering rollouts...')
             onpolicy_dataset = self._gather_rollouts(self._policy,
-                                                     num_onpolicy_rollouts) # rollout
+                                                     self._num_onpolicy_rollouts) # rollout
 
             ### PROBLEM 3
             ### YOUR CODE HERE

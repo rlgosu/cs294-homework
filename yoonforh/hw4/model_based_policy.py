@@ -25,7 +25,7 @@ class ModelBasedPolicy(object):
         self._learning_rate = 1e-3
         self._scope = scope
 
-        print('init dataset state mean:', init_dataset.state_mean, ', state std:', init_dataset.state_std)
+        # print('init dataset state mean:', init_dataset.state_mean, ', state std:', init_dataset.state_std)
         self._sess, self._state_ph, self._action_ph, self._next_state_ph,\
             self._next_state_pred, self._loss, self._optimizer, self._best_action = self._setup_graph()
 
@@ -104,8 +104,7 @@ class ModelBasedPolicy(object):
         """
         ### PROBLEM 1
         ### YOUR CODE HERE
-        ids = self._init_dataset
-        
+        ids = self._init_dataset        
         actual_delta_norm = utils.normalize(next_state_ph - state_ph, ids.state_mean, ids.state_std)
         predict_delta_norm = utils.normalize(next_state_pred - state_ph, ids.state_mean, ids.state_std)
         loss = tf.losses.mean_squared_error(actual_delta_norm, predict_delta_norm, reduction=tf.losses.Reduction.SUM_OVER_BATCH_SIZE)
